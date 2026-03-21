@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Suppliers - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo"><span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a></li>
+                    <li class="nav-item"><a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item"><a href="/products-page" class="nav-link"><span
+                                class="nav-icon">🏷️</span>Products</a></li>
+                    <li class="nav-item"><a href="/sales-page" class="nav-link"><span
+                                class="nav-icon">💰</span>Sales</a></li>
+                    <li class="nav-item"><a href="/refunds-page" class="nav-link"><span
+                                class="nav-icon">↩️</span>Refunds</a></li>
+                    <li class="nav-item"><a href="/customers-page" class="nav-link"><span
+                                class="nav-icon">👥</span>Customers</a></li>
+                    <li class="nav-item"><a href="/suppliers-page" class="nav-link active"><span
+                                class="nav-icon">🚚</span>Suppliers</a></li>
+                    <li class="nav-item" style="margin-top: auto;"><a href="#" class="nav-link" id="logout-btn"><span
+                                class="nav-icon">🚪</span>Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2 class="page-title">Suppliers & Expenses</h2>
+            </div>
+
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">All Suppliers</h3>
+                    <button class="btn btn-primary" onclick="openSupplierModal()">+ Add Supplier</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Total Expenses</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="suppliers-tbody">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">Payment History</h3>
+                    <button class="btn btn-secondary" onclick="openPaymentModal()">Record Payment</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Supplier</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="payments-tbody">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Supplier Modal -->
+    <div id="supplier-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeSupplierModal()">&times;</span>
+            <h2>Add Supplier</h2>
+            <form id="supplier-form">
+                <div class="form-group"><label>Name</label><input type="text" id="supplier-name" class="form-control"
+                        required></div>
+                <div class="form-group"><label>Phone</label><input type="text" id="supplier-phone" class="form-control"
+                        required></div>
+                <button type="submit" class="btn btn-primary btn-block">Add Supplier</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="payment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closePaymentModal()">&times;</span>
+            <h2>Record Expense</h2>
+            <form id="payment-form">
+                <div class="form-group">
+                    <label>Supplier</label>
+                    <select id="payment-supplier" class="form-control" required></select>
+                </div>
+                <div class="form-group"><label>Amount</label><input type="number" id="payment-amount"
+                        class="form-control" step="0.01" required></div>
+                <div class="form-group"><label>Description</label><input type="text" id="payment-desc"
+                        class="form-control"></div>
+                <button type="submit" class="btn btn-success btn-block">Record</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSuppliers();
+            loadPayments();
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadSuppliers() {
+            const res = await fetch('/suppliers');
+            const data = await res.json();
+            const payRes = await fetch('/supplier-payments');
+            const payments = await payRes.json();
+
+            const tbody = document.getElementById('suppliers-tbody');
+            const select = document.getElementById('payment-supplier');
+
+            select.innerHTML = '<option value="">Select Supplier</option>' + data.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+            if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center">No suppliers</td></tr>'; return; }
+
+            tbody.innerHTML = data.map(s => {
+                const total = payments.filter(p => p.supplier_id === s.id).reduce((sum, p) => sum + p.amount_paid, 0);
+                return `<tr>
+                    <td>#${s.id}</td><td><strong>${s.name}</strong></td><td>${s.phone}</td>
+                    <td><span class="badge badge-warning">$${total.toFixed(2)}</span></td>
+                    <td><button class="btn btn-sm btn-success" onclick="paySupplier(${s.id})">Pay</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function loadPayments() {
+            const res = await fetch('/supplier-payments');
+            const data = await res.json();
+            const tbody = document.getElementById('payments-tbody');
+            if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center">No payments</td></tr>'; return; }
+            tbody.innerHTML = data.map(p => `
+                <tr><td>#${p.id}</td><td>${p.supplier_name}</td><td>$${p.amount_paid.toFixed(2)}</td><td>${p.description || '-'}</td><td>${new Date(p.payment_date).toLocaleDateString()}</td></tr>
+            `).join('');
+        }
+
+        const sModal = document.getElementById('supplier-modal');
+        const pModal = document.getElementById('payment-modal');
+        function openSupplierModal() { sModal.style.display = 'block'; }
+        function closeSupplierModal() { sModal.style.display = 'none'; }
+        function openPaymentModal() { pModal.style.display = 'block'; }
+        function closePaymentModal() { pModal.style.display = 'none'; }
+        function paySupplier(id) {
+            document.getElementById('payment-supplier').value = id;
+            pModal.style.display = 'block';
+        }
+
+        document.getElementById('supplier-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const res = await fetch('/suppliers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('supplier-name').value,
+                    phone: document.getElementById('supplier-phone').value
+                })
+            });
+            if (res.ok) { closeSupplierModal(); loadSuppliers(); }
+        });
+
+        document.getElementById('payment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const res = await fetch('/supplier-payments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    supplier_id: document.getElementById('payment-supplier').value,
+                    amount_paid: document.getElementById('payment-amount').value,
+                    description: document.getElementById('payment-desc').value
+                })
+            });
+            if (res.ok) { closePaymentModal(); loadSuppliers(); loadPayments(); }
+        });
+    </script>
+</body>
+
+</html>

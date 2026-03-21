@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link active"><span class="nav-icon">📊</span>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/products-page" class="nav-link"><span class="nav-icon">🏷️</span>Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/purchase-orders-page" class="nav-link"><span class="nav-icon">📋</span>Purchase
+                            Orders</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/sales-page" class="nav-link"><span class="nav-icon">💰</span>Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/refunds-page" class="nav-link"><span class="nav-icon">↩️</span>Refunds</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/customers-page" class="nav-link"><span class="nav-icon">👥</span>Customers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/suppliers-page" class="nav-link"><span class="nav-icon">🚚</span>Suppliers</a>
+                    </li>
+                    <li class="nav-item" style="margin-top: auto;">
+                        <a href="#" class="nav-link" id="logout-btn"><span class="nav-icon">🚪</span>Logout</a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="user-profile">
+                    <span class="user-name">Welcome, <span id="user-role-display">User</span></span>
+                </div>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon sales">💰</div>
+                    <div class="stat-info">
+                        <h3>Total Sales</h3>
+                        <p id="total-sales">$0.00</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orders">📦</div>
+                    <div class="stat-info">
+                        <h3>Orders</h3>
+                        <p id="total-orders">0</p>
+                    </div>
+                </div>
+                <!-- Admin Only Financials -->
+                <div class="stat-card admin-only">
+                    <div class="stat-icon profit">📈</div>
+                    <div class="stat-info">
+                        <h3>Stock Value</h3>
+                        <p id="stock-value">$0.00</p>
+                    </div>
+                </div>
+                <div class="stat-card admin-only">
+                    <div class="stat-icon expenses">💸</div>
+                    <div class="stat-info">
+                        <h3>Suppliers Check</h3>
+                        <p id="total-expenses">$0.00</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alerts Grid -->
+            <div class="grid-2-col" style="margin-top: 2rem;">
+                <!-- Low Stock Alert -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>⚠️ Low Stock Alerts</h3>
+                    </div>
+                    <div class="card-body">
+                        <ul id="low-stock-list" class="list-group">
+                            <li class="list-item">Loading...</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Debt Summary (Admin Only) -->
+                <div class="card admin-only">
+                    <div class="card-header">
+                        <h3>💳 Debt Summary</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="debt-box">
+                            <h4>Accounts Receivable (Customers Owe Us)</h4>
+                            <p class="debt-amount text-success" id="ar-amount">$0.00</p>
+                        </div>
+                        <div class="debt-box" style="margin-top: 1rem;">
+                            <h4>Accounts Payable (We Owe Suppliers)</h4>
+                            <p class="debt-amount text-danger" id="ap-amount">$0.00</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Movements (Admin Only) -->
+            <div class="card admin-only" style="margin-top: 2rem;">
+                <div class="card-header">
+                    <h3>📜 Recent Stock Movements</h3>
+                    <input type="text" id="log-search" placeholder="Search..." onkeyup="filterLogs()"
+                        class="form-control" style="width: 200px;">
+                </div>
+                <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Product</th>
+                                <th>Change</th>
+                                <th>Reason</th>
+                                <th>Ref ID</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-tbody">
+                            <tr>
+                                <td colspan="5">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
+            loadStats();
+            loadLowStock();
+            loadLogs();
+
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function checkAuth() {
+            try {
+                const res = await fetch('/check-auth');
+                if (!res.ok) window.location.href = '/login-page';
+                const data = await res.json();
+                document.getElementById('user-role-display').textContent = data.role.toUpperCase();
+
+                if (data.role !== 'admin') {
+                    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                }
+            } catch (e) { window.location.href = '/login-page'; }
+        }
+
+        async function loadStats() {
+            const res = await fetch('/dashboard/stats');
+            const data = await res.json();
+
+            document.getElementById('total-sales').textContent = data.total_sales ? `$${data.total_sales.toFixed(2)}` : '$0.00';
+            document.getElementById('total-orders').textContent = data.total_orders;
+
+            if (data.stock_value !== undefined) {
+                document.getElementById('stock-value').textContent = `$${data.stock_value.toFixed(2)}`;
+                document.getElementById('total-expenses').textContent = `$${data.total_expenses.toFixed(2)}`;
+                document.getElementById('ar-amount').textContent = `$${data.accounts_receivable.toFixed(2)}`;
+                document.getElementById('ap-amount').textContent = `$${data.accounts_payable.toFixed(2)}`;
+            }
+        }
+
+        async function loadLowStock() {
+            const res = await fetch('/dashboard/stock-intelligence');
+            const data = await res.json();
+            const list = document.getElementById('low-stock-list');
+
+            if (data.length === 0) {
+                list.innerHTML = '<li class="list-item text-center">All stock levels healthy! ✅</li>';
+                return;
+            }
+
+            list.innerHTML = data.map(p => `
+                <li class="list-item flex justify-between" style="gap: 1rem;">
+                    <span><strong>${p.name}</strong> (${p.current_stock} in stock)</span>
+                    <span class="badge ${p.days_remaining < 7 ? 'badge-danger' : 'badge-warning'}">${p.prediction_text}</span>
+                </li>
+            `).join('');
+        }
+
+        async function loadLogs() {
+            const res = await fetch('/dashboard/movements');
+            const data = await res.json();
+            const tbody = document.getElementById('logs-tbody');
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No movements recorded</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(log => {
+                const color = log.change > 0 ? 'text-success' : 'text-danger';
+                return `
+                    <tr>
+                        <td>${new Date(log.timestamp).toLocaleString()}</td>
+                        <td>${log.product}</td>
+                        <td class="${color}"><strong>${log.change > 0 ? '+' : ''}${log.change}</strong></td>
+                        <td>${log.reason}</td>
+                        <td>${log.ref || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterLogs() {
+            const term = document.getElementById('log-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#logs-tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(term) ? '' : 'none';
+            });
+        }
+    </script>
+</body>
+
+</html>

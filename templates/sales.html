@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales - Inventory Management System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/products-page" class="nav-link"><span class="nav-icon">🏷️</span>Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/sales-page" class="nav-link active"><span class="nav-icon">💰</span>Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/refunds-page" class="nav-link"><span class="nav-icon">↩️</span>Refunds</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/customers-page" class="nav-link"><span class="nav-icon">👥</span>Customers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/suppliers-page" class="nav-link"><span class="nav-icon">🚚</span>Suppliers</a>
+                    </li>
+                    <li class="nav-item" style="margin-top: auto;">
+                        <a href="#" class="nav-link" id="logout-btn"><span class="nav-icon">🚪</span>Logout</a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2 class="page-title">Sales History</h2>
+                <a href="/pos-page" class="btn btn-primary">Go to POS System</a>
+            </div>
+
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">All Transactions</h3>
+                    <input type="text" id="sales-search" style="width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: white;" placeholder="Search sales...">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Customer</th>
+                            <th>Total Amount</th>
+                            <th>Amount Paid</th>
+                            <th>Balance Due</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-tbody">
+                        <tr>
+                            <td colspan="8" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Payment Modal -->
+    <div id="payment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closePaymentModal()">&times;</span>
+            <h2>Add Payment</h2>
+            <form id="payment-form" onsubmit="handlePaymentSubmit(event)">
+                <input type="hidden" id="payment-sale-id">
+                <div class="form-group">
+                    <label>Current Balance: <strong id="current-balance">$0.00</strong></label>
+                </div>
+                <div class="form-group">
+                    <label>Payment Amount</label>
+                    <input type="number" id="additional-payment" class="form-control" step="0.01" min="0.01" required>
+                </div>
+                <button type="submit" class="btn btn-success btn-block">Record Payment</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSales();
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadSales() {
+            try {
+                const response = await fetch('/sales');
+                const sales = await response.json();
+                const tbody = document.getElementById('sales-tbody');
+
+                if (sales.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center">No sales yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = sales.map(sale => {
+                    const statusClass = sale.payment_status === 'PAID' ? 'badge-success' :
+                        sale.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger';
+
+                    const paymentButton = sale.balance_due > 0 ?
+                        `<button class="btn btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;" onclick="openPaymentModal(${sale.id}, ${sale.balance_due})">Pay</button>` : '';
+
+                    return `
+                        <tr>
+                            <td>#${sale.id}</td>
+                            <td>${sale.customer_name}</td>
+                            <td>$${sale.total_amount.toFixed(2)}</td>
+                            <td>$${sale.amount_paid.toFixed(2)}</td>
+                            <td>$${sale.balance_due.toFixed(2)}</td>
+                            <td><span class="badge ${statusClass}">${sale.payment_status}</span></td>
+                            <td>${new Date(sale.sale_date).toLocaleDateString()}</td>
+                            <td style="display: flex; gap: 0.5rem;">
+                                ${paymentButton}
+                                <a href="/sales/${sale.id}/invoice" target="_blank" class="btn btn-primary" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Invoice</a>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) { console.error(error); }
+        }
+
+        // --- Phase 2: Toast & Debounce ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function createToastContainer() {
+            const div = document.createElement('div');
+            div.id = 'toast-container';
+            document.body.appendChild(div);
+            return div;
+        }
+
+        function debounce(func, timeout = 300) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
+            };
+        }
+
+        const filterSales = debounce(() => {
+            const term = document.getElementById('sales-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#sales-tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(term) ? '' : 'none';
+            });
+        });
+        document.getElementById('sales-search').addEventListener('input', filterSales);
+
+        function openPaymentModal(saleId, balance) {
+            document.getElementById('payment-sale-id').value = saleId;
+            document.getElementById('current-balance').textContent = `$${balance.toFixed(2)}`;
+            document.getElementById('payment-modal').style.display = 'block';
+        }
+        function closePaymentModal() {
+            document.getElementById('payment-modal').style.display = 'none';
+        }
+
+        async function handlePaymentSubmit(event) {
+            event.preventDefault();
+            const saleId = document.getElementById('payment-sale-id').value;
+            const additionalPayment = document.getElementById('additional-payment').value;
+
+            const res = await fetch(`/sales/${saleId}/payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ additional_payment: additionalPayment })
+            });
+
+            if (res.ok) {
+                closePaymentModal();
+                showToast('Payment processed successfully', 'success');
+                loadSales();
+                document.getElementById('payment-form').reset();
+            } else {
+                showToast('Error processing payment', 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>

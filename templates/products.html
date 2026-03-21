@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Products - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a></li>
+                    <li class="nav-item"><a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item"><a href="/products-page" class="nav-link active"><span
+                                class="nav-icon">🏷️</span>Products</a></li>
+                    <li class="nav-item"><a href="/purchase-orders-page" class="nav-link"><span
+                                class="nav-icon">📋</span>Purchase Orders</a></li>
+                    <li class="nav-item"><a href="/sales-page" class="nav-link"><span
+                                class="nav-icon">💰</span>Sales</a></li>
+                    <li class="nav-item"><a href="/refunds-page" class="nav-link"><span
+                                class="nav-icon">↩️</span>Refunds</a></li>
+                    <li class="nav-item"><a href="/customers-page" class="nav-link"><span
+                                class="nav-icon">👥</span>Customers</a></li>
+                    <li class="nav-item"><a href="/suppliers-page" class="nav-link"><span
+                                class="nav-icon">🚚</span>Suppliers</a></li>
+                    <li class="nav-item" style="margin-top: auto;"><a href="#" class="nav-link" id="logout-btn"><span
+                                class="nav-icon">🚪</span>Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <h2 class="page-title">Product Inventory</h2>
+                <div class="flex items-center gap-2" style="flex-wrap: wrap; justify-content: flex-end; width: 100%;">
+                    <input type="text" id="search-box" style="width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: white;" placeholder="Search products...">
+                    <div style="display: flex; gap: 0.5rem; padding: 0.2rem; background: var(--bg-card); border-radius: var(--radius-sm); align-items: center;">
+                        <input type="number" id="bulk-price" placeholder="New Price" step="0.01" style="width: 100px; padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: white;">
+                        <button id="bulk-price-btn" class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Set Price</button>
+                        <button id="bulk-delete-btn" class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Delete</button>
+                    </div>
+                    <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
+                </div>
+            </header>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;"><input type="checkbox" id="select-all" onclick="toggleAllCheckboxes(this)"></th>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>SKU</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="product-list">
+                        <tr>
+                            <td colspan="6">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeProductModal()">&times;</span>
+            <h2>Add Product</h2>
+            <form id="product-form">
+                <div class="grid-2-col">
+                    <div class="form-group"><label>Name</label><input type="text" id="p-name" class="form-control"
+                            required></div>
+                    <div class="form-group"><label>SKU</label><input type="text" id="p-sku" class="form-control"
+                            required></div>
+                </div>
+                <div class="grid-2-col">
+                    <div class="form-group"><label>Cost Price</label><input type="number" id="p-cost"
+                            class="form-control" step="0.01" required></div>
+                    <div class="form-group"><label>Selling Price</label><input type="number" id="p-price"
+                            class="form-control" step="0.01" required></div>
+                </div>
+                <div class="grid-2-col">
+                    <div class="form-group"><label>Initial Stock</label><input type="number" id="p-stock"
+                            class="form-control" required></div>
+                    <div class="form-group"><label>Min Stock (Alert)</label><input type="number" id="p-min"
+                            class="form-control" value="10"></div>
+                </div>
+                <div class="form-group">
+                    <label>Image (Upload)</label>
+                    <input type="file" id="p-file" class="form-control">
+                </div>
+                <!-- Legacy URL support -->
+                <div class="form-group">
+                    <label>Or Image URL</label>
+                    <input type="url" id="p-url" class="form-control" placeholder="https://...">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Save Product</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProducts();
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadProducts() {
+            const res = await fetch('/products');
+            const data = await res.json();
+            const list = document.getElementById('product-list');
+
+            if (data.length === 0) {
+                list.innerHTML = '<tr><td colspan="6" class="text-center">No products found</td></tr>';
+                return;
+            }
+
+            list.innerHTML = data.map(p => {
+                let img = p.image_filename ? `/static/uploads/${p.image_filename}` :
+                    (p.image_url || 'https://placehold.co/50?text=No+Img');
+
+                const status = p.quantity_in_stock <= p.min_stock_level ?
+                    '<span class="badge badge-danger">Low Stock</span>' :
+                    '<span class="badge badge-success">In Stock</span>';
+
+                return `
+                    <tr>
+                        <td><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
+                        <td><img src="${img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"></td>
+                        <td>${p.name}</td>
+                        <td>${p.sku}</td>
+                        <td>$${p.selling_price.toFixed(2)}</td>
+                        <td>${p.quantity_in_stock}</td>
+                        <td>${status}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // --- Phase 2: Toast & Debounce & Bulk ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container') || createToastContainer();
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function createToastContainer() {
+            const div = document.createElement('div');
+            div.id = 'toast-container';
+            document.body.appendChild(div);
+            return div;
+        }
+
+        function debounce(func, timeout = 300) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
+            };
+        }
+
+        const filterTable = debounce(() => {
+            const term = document.getElementById('search-box').value.toLowerCase();
+            const rows = document.querySelectorAll('#products-table tbody tr, #product-list tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(term) ? '' : 'none';
+            });
+        });
+        document.getElementById('search-box').addEventListener('input', filterTable);
+
+        function toggleAllCheckboxes(source) {
+            checkboxes = document.querySelectorAll('.product-checkbox');
+            for(var i=0, n=checkboxes.length;i<n;i++) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+
+        function getSelectedProducts() {
+            return Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => parseInt(cb.value));
+        }
+
+        document.getElementById('bulk-delete-btn').addEventListener('click', async () => {
+            const ids = getSelectedProducts();
+            if(ids.length === 0) return showToast('No products selected', 'error');
+            if(!confirm('Are you sure you want to delete selected products?')) return;
+            
+            await fetch('/products/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', product_ids: ids })
+            });
+            showToast('Products deleted successfully', 'success');
+            document.getElementById('select-all').checked = false;
+            loadProducts();
+        });
+
+        document.getElementById('bulk-price-btn').addEventListener('click', async () => {
+            const ids = getSelectedProducts();
+            const newPrice = document.getElementById('bulk-price').value;
+            if(ids.length === 0) return showToast('No products selected', 'error');
+            if(!newPrice) return showToast('Please enter a new price', 'error');
+            
+            await fetch('/products/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update_price', product_ids: ids, new_selling_price: parseFloat(newPrice) })
+            });
+            showToast('Prices updated successfully', 'success');
+            document.getElementById('select-all').checked = false;
+            document.getElementById('bulk-price').value = '';
+            loadProducts();
+        });
+
+        function openProductModal() {
+            document.getElementById('product-modal').style.display = 'block';
+        }
+        function closeProductModal() {
+            document.getElementById('product-modal').style.display = 'none';
+        }
+
+        document.getElementById('product-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const pData = {
+                name: document.getElementById('p-name').value,
+                sku: document.getElementById('p-sku').value,
+                cost_price: parseFloat(document.getElementById('p-cost').value),
+                selling_price: parseFloat(document.getElementById('p-price').value),
+                quantity_in_stock: parseInt(document.getElementById('p-stock').value),
+                min_stock_level: parseInt(document.getElementById('p-min').value),
+                image_url: document.getElementById('p-url').value || null
+            };
+
+            try {
+                // 1. Create Product
+                const res = await fetch('/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(pData)
+                });
+
+                const result = await res.json();
+                if (!res.ok) throw new Error(result.error || 'Failed to create product');
+
+                // 2. Upload Image if selected
+                const fileInput = document.getElementById('p-file');
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    formData.append('product_id', result.id);
+
+                    const uploadRes = await fetch('/products/upload-image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!uploadRes.ok) console.error('Image upload failed');
+                }
+
+                closeProductModal();
+                showToast('Product generated successfully', 'success');
+                loadProducts();
+                document.getElementById('product-form').reset();
+            } catch (err) {
+                showToast(err.message, 'error');
+            }
+        });
+    </script>
+</body>
+
+</html>

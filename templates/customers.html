@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Customers - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo"><span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item"><a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a></li>
+                    <li class="nav-item"><a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item"><a href="/products-page" class="nav-link"><span
+                                class="nav-icon">🏷️</span>Products</a></li>
+                    <li class="nav-item"><a href="/sales-page" class="nav-link"><span
+                                class="nav-icon">💰</span>Sales</a></li>
+                    <li class="nav-item"><a href="/refunds-page" class="nav-link"><span
+                                class="nav-icon">↩️</span>Refunds</a></li>
+                    <li class="nav-item"><a href="/customers-page" class="nav-link active"><span
+                                class="nav-icon">👥</span>Customers</a></li>
+                    <li class="nav-item"><a href="/suppliers-page" class="nav-link"><span
+                                class="nav-icon">🚚</span>Suppliers</a></li>
+                    <li class="nav-item" style="margin-top: auto;"><a href="#" class="nav-link" id="logout-btn"><span
+                                class="nav-icon">🚪</span>Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2 class="page-title">Customers & Debtors</h2>
+            </div>
+
+            <!-- Debtors Summary -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">⚠️ Outstanding Debts</h3>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Phone</th>
+                            <th>Email</th>
+                            <th>Total Debt</th>
+                        </tr>
+                    </thead>
+                    <tbody id="debtors-tbody">
+                        <tr>
+                            <td colspan="4" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- All Customers -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">All Customers</h3>
+                    <button class="btn btn-primary" onclick="openCustomerModal()">+ Add Customer</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Email</th>
+                            <th>Since</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customers-tbody">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add Customer Modal -->
+    <div id="customer-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeCustomerModal()">&times;</span>
+            <h2>Add Customer</h2>
+            <form id="customer-form">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="customer-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="customer-phone" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Email (Optional)</label>
+                    <input type="email" id="customer-email" class="form-control">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Add Customer</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDebtors();
+            loadCustomers();
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadDebtors() {
+            const res = await fetch('/reports/debtors');
+            const debtors = await res.json();
+            const tbody = document.getElementById('debtors-tbody');
+            if (debtors.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center">No outstanding debts</td></tr>'; return; }
+            tbody.innerHTML = debtors.map(d => `
+                <tr><td><strong>${d.full_name}</strong></td><td>${d.phone}</td><td>${d.email || '-'}</td><td><span class="badge badge-danger">$${d.total_debt.toFixed(2)}</span></td></tr>
+            `).join('');
+        }
+
+        async function loadCustomers() {
+            const res = await fetch('/customers');
+            const list = await res.json();
+            const tbody = document.getElementById('customers-tbody');
+            if (list.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center">No customers yet</td></tr>'; return; }
+            tbody.innerHTML = list.map(c => `
+                <tr><td>#${c.id}</td><td>${c.full_name}</td><td>${c.phone}</td><td>${c.email || '-'}</td><td>${new Date(c.created_at).toLocaleDateString()}</td></tr>
+            `).join('');
+        }
+
+        const modal = document.getElementById('customer-modal');
+        function openCustomerModal() { modal.style.display = 'block'; }
+        function closeCustomerModal() { modal.style.display = 'none'; }
+
+        document.getElementById('customer-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const data = {
+                full_name: document.getElementById('customer-name').value,
+                phone: document.getElementById('customer-phone').value,
+                email: document.getElementById('customer-email').value
+            };
+            const res = await fetch('/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (res.ok) {
+                closeCustomerModal();
+                loadCustomers();
+                document.getElementById('customer-form').reset();
+            }
+        });
+    </script>
+</body>
+
+</html>

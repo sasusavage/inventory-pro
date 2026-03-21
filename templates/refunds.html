@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Refunds - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/products-page" class="nav-link"><span class="nav-icon">🏷️</span>Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/sales-page" class="nav-link"><span class="nav-icon">💰</span>Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/refunds-page" class="nav-link active"><span class="nav-icon">↩️</span>Refunds</a>
+                    </li>
+                    <li class="nav-item" style="margin-top: auto;">
+                        <a href="#" class="nav-link" id="logout-btn"><span class="nav-icon">🚪</span>Logout</a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h2 class="page-title">Refund Requests</h2>
+                <button class="btn btn-primary" onclick="openRequestModal()">+ New Request</button>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Sale ID</th>
+                            <th>Customer</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="refunds-tbody">
+                        <tr>
+                            <td colspan="6" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Request Modal -->
+    <div id="request-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Request Refund</h2>
+            <form id="refund-form">
+                <div class="form-group">
+                    <label>Sale ID</label>
+                    <input type="number" id="sale-id" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Reason</label>
+                    <textarea id="reason" class="form-control" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Submit Request</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentUserRole = '';
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Check auth and role
+            const authRes = await fetch('/check-auth');
+            const authData = await authRes.json();
+            currentUserRole = authData.role;
+
+            loadRefunds();
+
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadRefunds() {
+            const res = await fetch('/refunds');
+            const refunds = await res.json();
+
+            const tbody = document.getElementById('refunds-tbody');
+            if (refunds.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No refund requests</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = refunds.map(r => `
+                <tr>
+                    <td>#${r.id}</td>
+                    <td>#${r.sale_id}</td>
+                    <td>${r.customer_name}</td>
+                    <td>${r.reason}</td>
+                    <td><span class="badge badge-${getStatusBadge(r.status)}">${r.status}</span></td>
+                    <td>
+                        ${renderActions(r)}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getStatusBadge(status) {
+            return status === 'pending' ? 'warning' : status === 'approved' ? 'success' : 'danger';
+        }
+
+        function renderActions(refund) {
+            if (refund.status !== 'pending') return `<small class="text-muted">${refund.admin_action || '-'}</small>`;
+
+            if (currentUserRole === 'admin') {
+                return `
+                    <button class="btn btn-sm btn-success" onclick="approveRefund(${refund.id}, 'restock')">Restock</button>
+                    <button class="btn btn-sm btn-danger" onclick="approveRefund(${refund.id}, 'damage')">Damage</button>
+                `;
+            } else {
+                return '<small class="text-muted">Waiting Approval</small>';
+            }
+        }
+
+        async function approveRefund(id, action) {
+            if (!confirm(`Confirm refund and ${action} items?`)) return;
+
+            const res = await fetch(`/refunds/${id}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+
+            if (res.ok) {
+                loadRefunds();
+            } else {
+                alert('Error processing refund');
+            }
+        }
+
+        // Modal Logic
+        const modal = document.getElementById('request-modal');
+        function openRequestModal() { modal.style.display = 'block'; }
+        document.querySelector('.close-modal').onclick = () => modal.style.display = 'none';
+
+        document.getElementById('refund-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const saleId = document.getElementById('sale-id').value;
+            const reason = document.getElementById('reason').value;
+
+            const res = await fetch('/refunds/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sale_id: saleId, reason })
+            });
+
+            if (res.ok) {
+                modal.style.display = 'none';
+                loadRefunds();
+                document.getElementById('refund-form').reset();
+            } else {
+                alert('Error submitting request');
+            }
+        });
+    </script>
+</body>
+
+</html>

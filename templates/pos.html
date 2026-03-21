@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .pos-layout {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .pos-main {
+            padding: 2rem;
+            overflow-y: auto;
+            background: var(--bg-primary);
+        }
+
+        .pos-sidebar {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .product-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .product-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+        }
+
+        .product-img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: var(--radius-sm);
+            margin-bottom: 0.5rem;
+            background: #2a2a2a;
+        }
+
+        .cart-items {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .cart-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .cart-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .customer-bar {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="pos-layout">
+        <main class="pos-main">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <a href="/" class="btn btn-secondary">← Dashboard</a>
+                <input type="text" id="search-products" class="form-control" style="width: 300px;"
+                    placeholder="Search products...">
+            </div>
+
+            <div class="product-grid" id="product-grid">
+                <!-- Products will be loaded here -->
+            </div>
+        </main>
+
+        <aside class="pos-sidebar">
+            <div class="customer-bar">
+                <div id="current-customer">
+                    <small>Customer</small><br>
+                    <strong>Walk-in Customer</strong>
+                </div>
+                <button class="btn btn-sm btn-primary" onclick="openCustomerModal()">Change</button>
+            </div>
+
+            <div class="cart-items" id="cart-items">
+                <!-- Cart items here -->
+                <div style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">
+                    Cart is empty
+                </div>
+            </div>
+
+            <div class="cart-footer">
+                <div class="total-row">
+                    <span>Total</span>
+                    <span id="cart-total">$0.00</span>
+                </div>
+                <button class="btn btn-primary" style="width: 100%; height: 50px; font-size: 1.1rem;"
+                    onclick="openPaymentModal()">
+                    Pay Now
+                </button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Customer Modal -->
+    <div id="customer-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Select Customer</h2>
+            <div class="form-group">
+                <input type="text" id="customer-search" class="form-control" placeholder="Search by phone or name...">
+            </div>
+            <div id="customer-results" class="list-group"
+                style="max-height: 200px; overflow-y: auto; margin-bottom: 1rem;"></div>
+            <hr>
+            <h3>New Customer</h3>
+            <form id="new-customer-form">
+                <input type="text" id="new-name" class="form-control mb-2" placeholder="Full Name" required>
+                <input type="text" id="new-phone" class="form-control mb-2" placeholder="Phone Number" required>
+                <button type="submit" class="btn btn-success btn-block">Create & Select</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="payment-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Complete Payment</h2>
+            <div class="stat-card" style="text-align: center; margin-bottom: 1rem;">
+                <div class="stat-label">Total Due</div>
+                <div class="stat-value" id="payment-total-display">$0.00</div>
+            </div>
+            <form id="payment-form">
+                <div class="form-group">
+                    <label>Amount Paid</label>
+                    <input type="number" id="amount-paid" class="form-control" step="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Balance Due / Change</label>
+                    <input type="text" id="balance-display" class="form-control" readonly>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">Confirm Payment</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let products = [];
+        let cart = [];
+        let currentCustomer = null;
+
+        // Initial Load
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadProducts();
+            renderProducts();
+
+            // Setup search
+            document.getElementById('search-products').addEventListener('input', (e) => {
+                renderProducts(e.target.value);
+            });
+
+            // Setup customer search
+            document.getElementById('customer-search').addEventListener('input', debounce(async (e) => {
+                const term = e.target.value;
+                if (term.length < 2) {
+                    document.getElementById('customer-results').innerHTML = '';
+                    return;
+                }
+
+                const res = await fetch('/pos/lookup-customer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ term }) // Send 'term' to match backend
+                });
+
+                if (res.ok) {
+                    const customers = await res.json();
+                    renderCustomerResults(customers);
+                }
+            }, 300));
+        });
+
+        // Product Functions
+        async function loadProducts() {
+            const res = await fetch('/products');
+            products = await res.json();
+        }
+
+        function renderProducts(filter = '') {
+            const grid = document.getElementById('product-grid');
+            const filtered = products.filter(p =>
+                p.name.toLowerCase().includes(filter.toLowerCase()) ||
+                p.sku.toLowerCase().includes(filter.toLowerCase())
+            );
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">No products found</div>';
+                return;
+            }
+
+            grid.innerHTML = filtered.map(p => {
+                const imgSrc = p.image_filename ? `/static/uploads/${p.image_filename}` :
+                    (p.image_url || 'https://placehold.co/100x100?text=No+Image');
+                return `
+                    <div class="product-card" onclick="addToCart(${p.id})">
+                        <img src="${imgSrc}" class="product-img" onerror="this.src='https://placehold.co/100x100?text=No+Image'">
+                        <strong>${p.name}</strong>
+                        <div>$${p.selling_price.toFixed(2)}</div>
+                        <span class="badge ${p.quantity_in_stock < 10 ? 'badge-danger' : 'badge-success'}">
+                            Qty: ${p.quantity_in_stock}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+            if (product.quantity_in_stock <= 0) return alert('Out of stock!');
+
+            const existing = cart.find(item => item.id === productId);
+            if (existing) {
+                if (existing.qty >= product.quantity_in_stock) return alert('No more stock available!');
+                existing.qty++;
+            } else {
+                cart.push({ ...product, qty: 1 });
+            }
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items');
+            if (cart.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); margin-top: 2rem;">Cart is empty</div>';
+                document.getElementById('cart-total').textContent = '$0.00';
+                return;
+            }
+
+            let total = 0;
+            container.innerHTML = cart.map(item => {
+                const subtotal = item.qty * item.selling_price;
+                total += subtotal;
+                return `
+                    <div class="cart-item">
+                        <div>
+                            <div>${item.name}</div>
+                            <small>$${item.selling_price.toFixed(2)} x ${item.qty}</small>
+                        </div>
+                        <div>
+                            <strong>$${subtotal.toFixed(2)}</strong>
+                            <button class="btn btn-sm btn-danger ml-2" onclick="removeFromCart(${item.id})">×</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('cart-total').textContent = `$${total.toFixed(2)}`;
+        }
+
+        function removeFromCart(id) {
+            cart = cart.filter(item => item.id !== id);
+            renderCart();
+        }
+
+        // Customer Logic
+        function openCustomerModal() {
+            document.getElementById('customer-modal').style.display = 'block';
+        }
+
+        function renderCustomerResults(customers) {
+            const container = document.getElementById('customer-results');
+            if (customers.length === 0) {
+                container.innerHTML = '<div class="p-2 text-muted">No customers found. Create new below via form.</div>';
+                return;
+            }
+
+            container.innerHTML = customers.map(c => `
+                <div class="p-2 border-bottom hover-bg-light" style="cursor: pointer;" onclick="selectCustomer(${c.id}, '${c.full_name}')">
+                    <div class="d-flex justify-content-between">
+                        <strong>${c.full_name}</strong>
+                        <span>${c.phone}</span>
+                    </div>
+                    <small class="text-secondary">Debt: $${(c.total_debt || 0).toFixed(2)}</small>
+                    <button class="btn btn-sm btn-outline-primary float-right">Select</button>
+                </div>
+            `).join('');
+        }
+
+        function selectCustomer(id, name) {
+            currentCustomer = { id, name };
+            document.getElementById('current-customer').innerHTML = `<small>Customer</small><br><strong>${name}</strong>`;
+            document.getElementById('customer-modal').style.display = 'none';
+        }
+
+        document.getElementById('new-customer-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fullName = document.getElementById('new-name').value;
+            const phone = document.getElementById('new-phone').value;
+
+            const res = await fetch('/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: fullName, phone: phone })
+            });
+
+            if (res.ok) {
+                const customer = await res.json();
+                selectCustomer(customer.id, customer.full_name);
+            }
+        });
+
+        // Payment Logic
+        function openPaymentModal() {
+            if (cart.length === 0) return alert('Cart is empty');
+            if (!currentCustomer) return alert('Please select a customer'); // Or allow default walk-in?
+
+            const total = cart.reduce((sum, item) => sum + (item.qty * item.selling_price), 0);
+            document.getElementById('payment-total-display').textContent = `$${total.toFixed(2)}`;
+            document.getElementById('amount-paid').value = total.toFixed(2); // Default to full payment
+            updateBalance();
+
+            document.getElementById('payment-modal').style.display = 'block';
+        }
+
+        document.getElementById('amount-paid').addEventListener('input', updateBalance);
+
+        function updateBalance() {
+            const total = cart.reduce((sum, item) => sum + (item.qty * item.selling_price), 0);
+            const paid = parseFloat(document.getElementById('amount-paid').value) || 0;
+            const balance = total - paid;
+
+            const display = document.getElementById('balance-display');
+            if (balance > 0) {
+                display.value = `Due: $${balance.toFixed(2)}`;
+                display.style.color = 'var(--warning-color)';
+            } else {
+                display.value = `Change: $${Math.abs(balance).toFixed(2)}`;
+                display.style.color = 'var(--success-color)';
+            }
+        }
+
+        document.getElementById('payment-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const paid = parseFloat(document.getElementById('amount-paid').value);
+
+            const payload = {
+                customer_id: currentCustomer.id,
+                amount_paid: paid,
+                items: cart.map(c => ({
+                    product_id: c.id,
+                    quantity: c.qty
+                }))
+            };
+
+            const res = await fetch('/sales', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                alert('Sale Completed!');
+                window.location.reload();
+            } else {
+                const err = await res.json();
+                alert(err.error);
+            }
+        });
+
+        // Utils
+        document.querySelectorAll('.close-modal').forEach(btn => {
+            btn.onclick = function () {
+                this.closest('.modal').style.display = 'none';
+            }
+        });
+
+        function debounce(func, wait) {
+            let timeout;
+            return function (...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+    </script>
+</body>
+
+</html>

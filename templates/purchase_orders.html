@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Purchase Orders - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link"><span class="nav-icon">📊</span>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/pos-page" class="nav-link"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/products-page" class="nav-link"><span class="nav-icon">🏷️</span>Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/purchase-orders-page" class="nav-link active"><span class="nav-icon">📋</span>Purchase
+                            Orders</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/sales-page" class="nav-link"><span class="nav-icon">💰</span>Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/refunds-page" class="nav-link"><span class="nav-icon">↩️</span>Refunds</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/customers-page" class="nav-link"><span class="nav-icon">👥</span>Customers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/suppliers-page" class="nav-link"><span class="nav-icon">🚚</span>Suppliers</a>
+                    </li>
+                    <li class="nav-item" style="margin-top: auto;">
+                        <a href="#" class="nav-link" id="logout-btn"><span class="nav-icon">🚪</span>Logout</a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="page-header">
+                <div>
+                    <h2 class="page-title">Purchase Orders</h2>
+                    <p class="text-secondary">Manage supply chain and restock inventory</p>
+                </div>
+                <button class="btn btn-primary" onclick="openCreateModal()">+ Create New PO</button>
+            </header>
+
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>PO #</th>
+                            <th>Supplier</th>
+                            <th>Status</th>
+                            <th>Total Amount</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="po-list">
+                        <tr>
+                            <td colspan="6" class="text-center">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Create PO Modal -->
+    <div id="create-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close-modal" onclick="closeCreateModal()">&times;</span>
+            <h2 class="modal-title">Create Purchase Order</h2>
+
+            <form id="po-form">
+                <div class="grid-2-col">
+                    <div class="form-group">
+                        <label>Supplier</label>
+                        <select id="po-supplier" class="form-control" required>
+                            <option value="">Select Supplier</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Type</label>
+                        <select id="po-payment" class="form-control">
+                            <option value="Credit">Credit (Pay Later)</option>
+                            <option value="Cash">Cash (Immediate)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <h4>Items</h4>
+                <div id="po-items-container">
+                    <!-- Dynamic Items -->
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="addPoItem()">+ Add Product</button>
+
+                <div class="flex justify-between items-center mt-4">
+                    <h3>Total: <span id="po-total">$0.00</span></h3>
+                    <button type="submit" class="btn btn-primary">Create PO</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let products = [];
+        let poItems = [];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadPOs();
+            loadSuppliers();
+            loadProducts();
+
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function loadPOs() {
+            const res = await axios.get('/purchase-orders');
+            const list = document.getElementById('po-list');
+
+            if (res.data.length === 0) {
+                list.innerHTML = '<tr><td colspan="6" class="text-center">No Purchase Orders found.</td></tr>';
+                return;
+            }
+
+            list.innerHTML = res.data.map(po => {
+                const badge = po.status === 'Received' ? 'badge-success' :
+                    po.status === 'Cancelled' ? 'badge-danger' : 'badge-warning';
+
+                const actionBtn = po.status === 'Pending' ?
+                    `<button class="btn btn-sm btn-success" onclick="receivePO(${po.id})">Receive Stock</button>` :
+                    '<span class="text-muted">-</span>';
+
+                return `
+                    <tr>
+                        <td><strong>#${po.id}</strong></td>
+                        <td>${po.supplier}</td>
+                        <td><span class="badge ${badge}">${po.status}</span></td>
+                        <td>$${po.total.toFixed(2)}</td>
+                        <td>${new Date(po.date).toLocaleDateString()}</td>
+                        <td>${actionBtn}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadSuppliers() {
+            const res = await axios.get('/suppliers');
+            const select = document.getElementById('po-supplier');
+            select.innerHTML = '<option value="">Select Supplier</option>' +
+                res.data.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+
+        async function loadProducts() {
+            const res = await axios.get('/products');
+            products = res.data;
+        }
+
+        function openCreateModal() {
+            document.getElementById('create-modal').style.display = 'block';
+            poItems = [];
+            document.getElementById('po-items-container').innerHTML = '';
+            addPoItem(); // Add one row by default
+        }
+        function closeCreateModal() {
+            document.getElementById('create-modal').style.display = 'none';
+        }
+
+        function addPoItem() {
+            const idx = poItems.length;
+            poItems.push({ product_id: null, quantity: 1, cost: 0 });
+
+            const div = document.createElement('div');
+            div.className = 'grid-3-col mb-2 items-end';
+            div.id = `item-row-${idx}`;
+            div.innerHTML = `
+                <div class="form-group">
+                    <label>Product</label>
+                    <select class="form-control" onchange="updateItem(${idx}, 'product_id', this.value)">
+                        <option value="">Select Product...</option>
+                        ${products.map(p => `<option value="${p.id}">${p.name} (Cur: ${p.cost_price})</option>`).join('')}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" class="form-control" value="1" min="1" onchange="updateItem(${idx}, 'quantity', this.value)">
+                </div>
+                <div class="form-group">
+                    <label>Unit Cost</label>
+                    <input type="number" class="form-control" step="0.01" value="0.00" onchange="updateItem(${idx}, 'cost', this.value)">
+                </div>
+            `;
+            document.getElementById('po-items-container').appendChild(div);
+        }
+
+        function updateItem(idx, field, val) {
+            if (field === 'product_id') {
+                poItems[idx].product_id = parseInt(val);
+                // Auto-fill cost from current product cost
+                const p = products.find(x => x.id == val);
+                if (p) {
+                    poItems[idx].cost = p.cost_price;
+                    document.querySelector(`#item-row-${idx} input[step="0.01"]`).value = p.cost_price;
+                }
+            } else if (field === 'quantity') {
+                poItems[idx].quantity = parseInt(val);
+            } else if (field === 'cost') {
+                poItems[idx].cost = parseFloat(val);
+            }
+            calculateTotal();
+        }
+
+        function calculateTotal() {
+            const total = poItems.reduce((acc, item) => acc + (item.quantity * item.cost), 0);
+            document.getElementById('po-total').textContent = `$${total.toFixed(2)}`;
+        }
+
+        document.getElementById('po-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const supplierId = document.getElementById('po-supplier').value;
+            const paymentType = document.getElementById('po-payment').value;
+
+            const validItems = poItems.filter(i => i.product_id && i.quantity > 0);
+
+            if (!supplierId || validItems.length === 0) {
+                alert('Please select a supplier and at least one product.');
+                return;
+            }
+
+            try {
+                await axios.post('/purchase-orders', {
+                    supplier_id: supplierId,
+                    payment_type: paymentType,
+                    items: validItems.map(i => ({
+                        product_id: i.product_id,
+                        quantity: i.quantity,
+                        unit_cost: i.cost
+                    }))
+                });
+                closeCreateModal();
+                loadPOs();
+            } catch (err) {
+                alert('Error creating PO');
+            }
+        });
+
+        async function receivePO(id) {
+            if (!confirm('Are you sure you want to receive this stock? This will update inventory levels.')) return;
+            try {
+                await axios.post(`/purchase-orders/${id}/receive`);
+                alert('Stock updated successfully!');
+                loadPOs();
+            } catch (err) {
+                alert('Error receiving PO');
+            }
+        }
+    </script>
+</body>
+
+</html>
