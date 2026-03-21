@@ -14,10 +14,11 @@ class Config:
     
     # PostgreSQL database connection string
     # Format: postgresql://username:password@host:port/database_name
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        'DATABASE_URL',
-        'postgresql://postgres:postgres@localhost:5432/inventory_db'
-    )
+    _db_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/inventory_db')
+    if _db_url.startswith('postgres://'):
+        _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
+    
+    SQLALCHEMY_DATABASE_URI = _db_url
     
     # Disable FSAModifications tracking (saves resources)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
