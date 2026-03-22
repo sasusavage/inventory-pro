@@ -545,8 +545,8 @@ label {
     transition: opacity var(--trans-smooth);
 }
 
-.modal.active {
-    display: flex;
+.modal.active, .modal[style*="display: block"] {
+    display: flex !important;
     opacity: 1;
 }
 
@@ -564,7 +564,7 @@ label {
     transition: all var(--trans-smooth);
 }
 
-.modal.active .modal-content {
+.modal.active .modal-content, .modal[style*="display: block"] .modal-content {
     transform: scale(1) translateY(0);
 }
 
