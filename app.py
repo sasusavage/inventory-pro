@@ -615,7 +615,7 @@ def stock_intelligence():
     sales_dict = {row.product_id: row.qty_sold for row in sales_last_30}
     intelligence = []
     
-    for p in Product.query.filter(Product.quantity_in_stock <= p.min_stock_level).all():
+    for p in Product.query.filter(Product.quantity_in_stock <= Product.min_stock_level).all():
         qty_sold_30 = sales_dict.get(p.id, 0)
         daily_rate = qty_sold_30 / 30.0
         days_remaining = (p.quantity_in_stock / daily_rate) if daily_rate > 0 else 999 
