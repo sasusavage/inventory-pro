@@ -543,11 +543,13 @@ label {
     justify-content: center;
     opacity: 0;
     transition: opacity var(--trans-smooth);
+    pointer-events: none;
 }
 
 .modal.active, .modal[style*="display: block"] {
     display: flex !important;
     opacity: 1;
+    pointer-events: auto;
 }
 
 .modal-content {
@@ -662,9 +664,11 @@ label {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    pointer-events: none;
 }
 
 .toast {
+    pointer-events: auto;
     background: rgba(20, 20, 22, 0.85);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
