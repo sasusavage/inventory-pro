@@ -27,20 +27,27 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 db.init_app(app)
 
 # Create tables on first run (if specific file db)
-with app.app_context():
-    db.create_all()
-    # Create default admin if not exists
-    if not User.query.filter_by(role='admin').first():
-        admin = User(username='admin', role='admin')
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-    # Create default sales if not exists
-    if not User.query.filter_by(role='sales').first():
-        sales = User(username='sales', role='sales')
-        sales.set_password('sales123')
-        db.session.add(sales)
-        db.session.commit()
+# Create tables on first run (if specific file db)
+# Guarded initialization to prevent side effects during seeding/importing
+def initialize_db(app):
+    with app.app_context():
+        db.create_all()
+        # Create default admin if not exists
+        if not User.query.filter_by(username='admin_pro').first():
+            admin = User(username='admin_pro', role='admin')
+            admin.set_password('adminPass2026')
+            db.session.add(admin)
+            db.session.commit()
+    
+        # Create default sales if not exists
+        if not User.query.filter_by(username='sales_pro').first():
+            sales = User(username='sales_pro', role='sales')
+            sales.set_password('salesPass2026')
+            db.session.add(sales)
+            db.session.commit()
+
+# Call initialization
+initialize_db(app)
 
 # --- Auth Decorators ---
 def login_required(f):
