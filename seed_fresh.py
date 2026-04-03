@@ -29,6 +29,15 @@ def create_fresh_data():
         admin = User(username='admin_pro', role='admin')
         admin.set_password('adminPass2026')
         admin.can_manage_users = True
+        # Explicitly set all permission flags to True for Admin
+        admin.can_view_dashboard = True
+        admin.can_view_pos = True
+        admin.can_view_products = True
+        admin.can_view_sales = True
+        admin.can_view_purchase_orders = True
+        admin.can_view_customers = True
+        admin.can_view_suppliers = True
+        admin.can_view_reports = True
         db.session.add(admin)
         
         # New Sales User (Limited Access)

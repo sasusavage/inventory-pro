@@ -70,7 +70,9 @@
     let customers = [];
 
     document.addEventListener('DOMContentLoaded', async () => {
-        await checkAuth(); // In layout.html but we need it here for role
+        if (typeof checkAuthAndPerms === 'function') {
+            await checkAuthAndPerms();
+        }
         loadPOSProducts();
         loadPOSCustomers();
 

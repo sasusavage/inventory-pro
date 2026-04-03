@@ -103,62 +103,80 @@
     });
 
     async function loadStats() {
-        const res = await fetch('/dashboard/stats');
-        const data = await res.json();
+        try {
+            const res = await fetch('/dashboard/stats');
+            const data = await res.json();
 
-        document.getElementById('total-sales').textContent = data.total_sales ? `$${data.total_sales.toFixed(2)}` : '$0.00';
-        document.getElementById('total-orders').textContent = data.total_orders;
+            document.getElementById('total-sales').textContent = data.total_sales ? `$${data.total_sales.toFixed(2)}` : '$0.00';
+            document.getElementById('total-orders').textContent = data.total_orders;
 
-        if (data.stock_value !== undefined) {
-            document.getElementById('stock-value').textContent = `$${data.stock_value.toFixed(2)}`;
-            document.getElementById('total-expenses').textContent = `$${data.total_expenses.toFixed(2)}`;
-            document.getElementById('ar-amount').textContent = `$${data.accounts_receivable.toFixed(2)}`;
-            document.getElementById('ap-amount').textContent = `$${data.accounts_payable.toFixed(2)}`;
+            if (data.stock_value !== undefined) {
+                document.getElementById('stock-value').textContent = `$${data.stock_value.toFixed(2)}`;
+                document.getElementById('total-expenses').textContent = `$${data.total_expenses.toFixed(2)}`;
+                document.getElementById('ar-amount').textContent = `$${data.accounts_receivable.toFixed(2)}`;
+                document.getElementById('ap-amount').textContent = `$${data.accounts_payable.toFixed(2)}`;
+            }
+        } catch (e) {
+            console.error("Failed to load stats", e);
         }
     }
 
     async function loadLowStock() {
-        const res = await fetch('/dashboard/stock-intelligence');
-        const data = await res.json();
-        const list = document.getElementById('low-stock-list');
+        try {
+            const res = await fetch('/dashboard/stock-intelligence');
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            const data = await res.json();
+            const list = document.getElementById('low-stock-list');
 
-        if (data.length === 0) {
-            list.innerHTML = '<li class="list-item text-center">All stock levels healthy! ✅</li>';
-            return;
+            if (!data || data.length === 0) {
+                list.innerHTML = '<li class="list-item text-center">All stock levels healthy! ✅</li>';
+                return;
+            }
+
+            list.innerHTML = data.map(p => `
+                <li class="list-item flex justify-between" style="gap: 1rem;">
+                    <span><strong>${p.name}</strong> (${p.current_stock} in stock)</span>
+                    <span class="badge ${p.days_remaining < 7 ? 'badge-danger' : 'badge-warning'}">${p.prediction_text}</span>
+                </li>
+            `).join('');
+        } catch (e) {
+            console.error("Failed to load stock intel", e);
+            document.getElementById('low-stock-list').innerHTML = '<li class="list-item text-center">Error loading stock intel ❌</li>';
         }
-
-        list.innerHTML = data.map(p => `
-            <li class="list-item flex justify-between" style="gap: 1rem;">
-                <span><strong>${p.name}</strong> (${p.current_stock} in stock)</span>
-                <span class="badge ${p.days_remaining < 7 ? 'badge-danger' : 'badge-warning'}">${p.prediction_text}</span>
-            </li>
-        `).join('');
     }
 
     async function loadLogs() {
-        const res = await fetch('/dashboard/movements');
-        const data = await res.json();
-        const tbody = document.getElementById('logs-tbody');
+        try {
+            const res = await fetch('/dashboard/movements');
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            const data = await res.json();
+            const tbody = document.getElementById('logs-tbody');
 
-        if (!tbody) return;
+            if (!tbody) return;
 
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No movements recorded</td></tr>';
-            return;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No movements recorded</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(log => {
+                const color = log.change > 0 ? 'text-success' : 'text-danger';
+                return `
+                    <tr>
+                        <td>${new Date(log.timestamp).toLocaleString()}</td>
+                        <td>${log.product}</td>
+                        <td class="${color}"><strong>${log.change > 0 ? '+' : ''}${log.change}</strong></td>
+                        <td>${log.reason}</td>
+                        <td>${log.ref || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error("Failed to load logs", e);
+            if (document.getElementById('logs-tbody')) {
+                document.getElementById('logs-tbody').innerHTML = '<tr><td colspan="5" class="text-center">Error loading logs ❌</td></tr>';
+            }
         }
-
-        tbody.innerHTML = data.map(log => {
-            const color = log.change > 0 ? 'text-success' : 'text-danger';
-            return `
-                <tr>
-                    <td>${new Date(log.timestamp).toLocaleString()}</td>
-                    <td>${log.product}</td>
-                    <td class="${color}"><strong>${log.change > 0 ? '+' : ''}${log.change}</strong></td>
-                    <td>${log.reason}</td>
-                    <td>${log.ref || '-'}</td>
-                </tr>
-            `;
-        }).join('');
     }
 
     function filterLogs() {
