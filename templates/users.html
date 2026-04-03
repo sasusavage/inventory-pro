@@ -1,0 +1,95 @@
+{% extends "layout.html" %}
+
+{% block title %}User Permissions - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">User Permissions & Access</h2>
+</header>
+
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Dashboard</th>
+                <th>POS</th>
+                <th>Products</th>
+                <th>Purchases</th>
+                <th>Sales</th>
+                <th>Customers</th>
+                <th>Suppliers</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="users-tbody">
+            <tr>
+                <td colspan="10" class="text-center">Loading users...</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', loadUsers);
+
+    async function loadUsers() {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+        const tbody = document.getElementById('users-tbody');
+
+        tbody.innerHTML = users.map(user => {
+            const p = user.permissions;
+            const isAdmin = user.role === 'admin';
+            
+            return `
+                <tr data-user-id="${user.id}">
+                    <td><strong>${user.username}</strong></td>
+                    <td><span class="badge ${isAdmin ? 'badge-primary' : 'badge-secondary'}">${user.role}</span></td>
+                    <td>${renderToggle(user.id, 'can_view_dashboard', p.can_view_dashboard, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_pos', p.can_view_pos, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_products', p.can_view_products, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_purchase_orders', p.can_view_purchase_orders, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_sales', p.can_view_sales, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_customers', p.can_view_customers, isAdmin)}</td>
+                    <td>${renderToggle(user.id, 'can_view_suppliers', p.can_view_suppliers, isAdmin)}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="savePermissions(${user.id})" ${isAdmin ? 'disabled' : ''}>Save</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderToggle(userId, field, value, disabled) {
+        return `<input type="checkbox" class="perm-check" data-field="${field}" ${value ? 'checked' : ''} ${disabled ? 'disabled' : ''}>`;
+    }
+
+    async function savePermissions(userId) {
+        const row = document.querySelector(`tr[data-user-id="${userId}"]`);
+        const checks = row.querySelectorAll('.perm-check');
+        const data = {};
+        
+        checks.forEach(c => {
+            data[c.dataset.field] = c.checked;
+        });
+
+        try {
+            const res = await fetch(`/api/users/${userId}/permissions`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert('Permissions updated successfully!');
+            } else {
+                alert('Failed to update permissions.');
+            }
+        } catch (e) {
+            alert('Error updating permissions.');
+        }
+    }
+</script>
+{% endblock %}

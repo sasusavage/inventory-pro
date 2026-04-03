@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}InventoryPro{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Mobile Menu Toggle Styling */
+        #mobile-menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            #mobile-menu-toggle { display: block; }
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                position: fixed;
+                height: 100vh;
+                top: 0;
+                left: 0;
+                width: 280px;
+                background: rgba(10, 10, 12, 0.98) !important;
+                z-index: 1000;
+            }
+            .sidebar.show { transform: translateX(0); }
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5);
+                backdrop-filter: blur(4px);
+                z-index: 999;
+            }
+            .sidebar-overlay.show { display: block; }
+            .main-content { margin-left: 0 !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="logo">
+                <span class="logo-icon">📦</span>
+                <h1>InventoryPro</h1>
+                <button class="close-btn mobile-only" onclick="toggleSidebar()" style="display: none;">×</button>
+            </div>
+
+            <nav style="flex: 1; overflow-y: auto;">
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/" class="nav-link" id="nav-dashboard" data-perm="dashboard"><span class="nav-icon">📊</span>Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/pos-page" class="nav-link" id="nav-pos" data-perm="pos"><span class="nav-icon">🖥️</span>POS</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/products-page" class="nav-link" id="nav-products" data-perm="products"><span class="nav-icon">🏷️</span>Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/purchase-orders-page" class="nav-link" id="nav-purchase" data-perm="purchase"><span class="nav-icon">📋</span>Purchase Orders</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/sales-page" class="nav-link" id="nav-sales" data-perm="sales"><span class="nav-icon">💰</span>Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/refunds-page" class="nav-link" id="nav-refunds" data-perm="refunds"><span class="nav-icon">↩️</span>Refunds</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/customers-page" class="nav-link" id="nav-customers" data-perm="customers"><span class="nav-icon">👥</span>Customers</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/suppliers-page" class="nav-link" id="nav-suppliers" data-perm="suppliers"><span class="nav-icon">🚚</span>Suppliers</a>
+                    </li>
+                    <li class="nav-item admin-only">
+                        <a href="/users-page" class="nav-link" id="nav-users" data-perm="users"><span class="nav-icon">🛡️</span>User Permissions</a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="nav-item" style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--border-subtle);">
+                <a href="#" class="nav-link" id="logout-btn"><span class="nav-icon">🚪</span>Logout</a>
+            </div>
+        </aside>
+
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <button id="mobile-menu-toggle" onclick="toggleSidebar()">☰</button>
+                <div class="user-profile">
+                    <span class="user-name">Welcome, <span id="user-role-display">User</span></span>
+                </div>
+            </header>
+
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthAndPerms();
+            highlightNav();
+
+            document.getElementById('logout-btn').addEventListener('click', async (e) => {
+                e.preventDefault();
+                await fetch('/logout', { method: 'POST' });
+                window.location.href = '/login-page';
+            });
+        });
+
+        async function checkAuthAndPerms() {
+            try {
+                const res = await fetch('/check-auth');
+                if (!res.ok) {
+                    window.location.href = '/login-page';
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('user-role-display').textContent = (data.username || data.role).toUpperCase();
+
+                // Advanced RBAC Hiding (Frontend Side)
+                if (data.role !== 'admin') {
+                    // Hide entire sections marked admin-only
+                    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                    
+                    // Check granular permissions if available
+                    if (data.permissions) {
+                        const perms = data.permissions;
+                        if (!perms.can_view_sales) document.getElementById('nav-sales')?.parentElement.remove();
+                        if (!perms.can_view_pos) document.getElementById('nav-pos')?.parentElement.remove();
+                        if (!perms.can_view_products) document.getElementById('nav-products')?.parentElement.remove();
+                        if (!perms.can_view_reports) {
+                            // Dashboard often has report data, so we might want to handle that in the block content
+                        }
+                    }
+                }
+            } catch (e) { 
+                console.error("Auth check failed", e);
+                // window.location.href = '/login-page'; 
+            }
+        }
+
+        function highlightNav() {
+            const path = window.location.pathname;
+            document.querySelectorAll('.nav-link').forEach(link => {
+                if (link.getAttribute('href') === path) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('show');
+            document.getElementById('sidebar-overlay').classList.toggle('show');
+        }
+    </script>
+</body>
+</html>

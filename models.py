@@ -14,6 +14,17 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), nullable=False, default='sales') # 'admin' or 'sales'
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Permission Flags (RBAC)
+    can_view_dashboard = db.Column(db.Boolean, default=True)
+    can_view_pos = db.Column(db.Boolean, default=True)
+    can_view_products = db.Column(db.Boolean, default=True)
+    can_view_sales = db.Column(db.Boolean, default=True)
+    can_view_purchase_orders = db.Column(db.Boolean, default=True)
+    can_view_customers = db.Column(db.Boolean, default=True)
+    can_view_suppliers = db.Column(db.Boolean, default=True)
+    can_view_reports = db.Column(db.Boolean, default=True)
+    can_manage_users = db.Column(db.Boolean, default=False)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

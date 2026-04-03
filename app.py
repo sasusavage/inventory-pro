@@ -46,8 +46,8 @@ def initialize_db(app):
             db.session.add(sales)
             db.session.commit()
 
-# Call initialization
-initialize_db(app)
+# Call initialization (Now moved to main block)
+# initialize_db(app) 
 
 # --- Auth Decorators ---
 def login_required(f):
@@ -65,6 +65,28 @@ def admin_required(f):
             return jsonify({'error': 'Admin access required'}), 403
         return f(*args, **kwargs)
     return decorated_function
+
+def permission_required(perm):
+    """
+    Checks if the logged-in user has the specified permission.
+    """
+    def decorator(f):
+        @functools.wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                return redirect(url_for('login_page'))
+            user = User.query.get(session['user_id'])
+            if not user:
+                return redirect(url_for('login_page'))
+            # Admin always has permission
+            if user.role == 'admin':
+                return f(*args, **kwargs)
+            # Check specific permission attribute
+            if not getattr(user, perm, False):
+                return render_template('dashboard.html', error="You do not have permission to access that section.")
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 # --- Helper Functions ---
 def allowed_file(filename):
@@ -103,6 +125,7 @@ def products_page():
 
 @app.route('/sales-page')
 @login_required
+@permission_required('can_view_sales')
 def sales_page():
     return render_template('sales.html', user_role=session.get('role'))
 
@@ -126,6 +149,11 @@ def refunds_page():
 def purchase_orders_page():
     return render_template('purchase_orders.html', user_role=session.get('role'))
 
+@app.route('/users-page')
+@admin_required
+def users_page():
+    return render_template('users.html')
+
 # --- API Routes ---
 
 @app.route('/login', methods=['POST'])
@@ -146,8 +174,60 @@ def logout():
 @app.route('/check-auth', methods=['GET'])
 def check_auth():
     if 'user_id' in session:
-        return jsonify({'authenticated': True, 'role': session['role']})
+        user = User.query.get(session['user_id'])
+        if user:
+            return jsonify({
+                'authenticated': True, 
+                'role': user.role, 
+                'username': user.username,
+                'permissions': {
+                    'can_view_dashboard': user.can_view_dashboard,
+                    'can_view_pos': user.can_view_pos,
+                    'can_view_products': user.can_view_products,
+                    'can_view_sales': user.can_view_sales,
+                    'can_view_purchase_orders': user.can_view_purchase_orders,
+                    'can_view_customers': user.can_view_customers,
+                    'can_view_suppliers': user.can_view_suppliers,
+                    'can_view_reports': user.can_view_reports,
+                    'can_manage_users': user.can_manage_users
+                }
+            })
     return jsonify({'authenticated': False}), 401
+
+@app.route('/api/users', methods=['GET'])
+@admin_required
+def get_users():
+    users = User.query.all()
+    return jsonify([{
+        'id': u.id,
+        'username': u.username,
+        'role': u.role,
+        'permissions': {
+            'can_view_dashboard': u.can_view_dashboard,
+            'can_view_pos': u.can_view_pos,
+            'can_view_products': u.can_view_products,
+            'can_view_sales': u.can_view_sales,
+            'can_view_purchase_orders': u.can_view_purchase_orders,
+            'can_view_customers': u.can_view_customers,
+            'can_view_suppliers': u.can_view_suppliers,
+            'can_view_reports': u.can_view_reports,
+            'can_manage_users': u.can_manage_users
+        }
+    } for u in users])
+
+@app.route('/api/users/<int:user_id>/permissions', methods=['PUT'])
+@admin_required
+def update_permissions(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.json
+    
+    # Update boolean permissions
+    for perm in data:
+        if hasattr(user, perm):
+            setattr(user, perm, data[perm])
+            
+    db.session.commit()
+    return jsonify({'message': 'Permissions updated successfully'})
 
 @app.route('/dashboard/stats')
 @login_required
@@ -740,6 +820,7 @@ def monthly_trends():
     } for row in sales])
 
 if __name__ == '__main__':
+    initialize_db(app) # Initialize DB when running app directly
     port = int(os.environ.get('PORT', 5000))
     debug_mode = os.environ.get('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug_mode)

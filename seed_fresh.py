@@ -25,14 +25,17 @@ def create_fresh_data():
         print("✅ Tables created successfully!")
         
         print("\n🔐 Creating new users...")
-        # New Admin
+        # New Admin (All True by default)
         admin = User(username='admin_pro', role='admin')
         admin.set_password('adminPass2026')
+        admin.can_manage_users = True
         db.session.add(admin)
         
-        # New Sales User
+        # New Sales User (Limited Access)
         sales_user = User(username='sales_pro', role='sales')
         sales_user.set_password('salesPass2026')
+        sales_user.can_view_sales = False # Explicitly limited as per request
+        sales_user.can_view_reports = False
         db.session.add(sales_user)
         
         db.session.flush() # Get IDs
