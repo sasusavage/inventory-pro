@@ -44,6 +44,7 @@ class Product(db.Model):
     image_url = db.Column(db.String(500), nullable=True)
     image_filename = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True, index=True)
 
 
 class Customer(db.Model):
@@ -191,11 +192,7 @@ class Category(db.Model):
     color = db.Column(db.String(20), default='#4f46e5')  # hex colour for badge
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    products = db.relationship('Product', backref='category', lazy=True)
-
-
-# Add category_id FK to Product
-Product.category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True, index=True)
+    products = db.relationship('Product', backref='category', lazy=True, foreign_keys='Product.category_id')
 
 
 class LoyaltyPoint(db.Model):
