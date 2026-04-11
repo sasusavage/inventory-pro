@@ -86,9 +86,12 @@
         loadProducts();
     });
 
-    async function loadProducts() {
-        const res = await fetch('/products');
-        const data = await res.json();
+    async function loadProducts(search = '') {
+        const params = new URLSearchParams({ per_page: 500 });
+        if (search) params.set('search', search);
+        const res = await fetch(`/products?${params}`);
+        const json = await res.json();
+        const data = json.data || json; // backwards-compat
         const list = document.getElementById('product-list');
 
         if (data.length === 0) {
@@ -211,14 +214,11 @@
         } catch (err) { alert(err.message); }
     });
     
-    // Search filtering
+    // Server-side search
+    let searchTimer;
     document.getElementById('search-box').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#product-list tr');
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(term) ? '' : 'none';
-        });
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => loadProducts(e.target.value.trim()), 300);
     });
 </script>
 {% endblock %}

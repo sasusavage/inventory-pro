@@ -1,0 +1,553 @@
+{% extends "layout.html" %}
+{% block title %}AI Analytics - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header" style="margin-bottom:1.5rem;">
+    <div>
+        <h2 class="page-title" style="margin-bottom:0.25rem;">🤖 AI Analytics</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+            Powered by Groq · <span id="data-timestamp" style="font-style:italic;">loading…</span>
+        </p>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="refreshAll()" id="refresh-btn">↻ Refresh AI</button>
+</header>
+
+<!-- ═══ HEALTH BANNER ══════════════════════════════════════════════════════ -->
+<div id="health-banner" style="margin-bottom:1.5rem;display:none;">
+    <div id="health-card" class="card" style="padding:1.25rem 1.5rem;">
+        <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+            <div id="health-badge" style="flex-shrink:0;"></div>
+            <div style="flex:1;">
+                <p id="health-summary" style="margin:0 0 0.5rem;line-height:1.6;"></p>
+                <p id="health-reason"  style="margin:0;font-size:0.82rem;color:var(--text-muted);"></p>
+            </div>
+            <div style="flex-shrink:0;">
+                <span id="top-risk-badge"
+                      style="background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);
+                             color:#f43f5e;border-radius:var(--radius-sm);
+                             padding:0.25rem 0.6rem;font-size:0.78rem;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ KPI ROW ═══════════════════════════════════════════════════════════ -->
+<div class="stats-grid" style="margin-bottom:2rem;" id="kpi-row">
+    <div class="stat-card">
+        <div class="stat-icon sales">💰</div>
+        <div class="stat-info">
+            <h3>Revenue (30d)</h3>
+            <p id="kpi-revenue">—</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon profit">📈</div>
+        <div class="stat-info">
+            <h3>Gross Profit (30d)</h3>
+            <p id="kpi-profit">—</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orders">🔮</div>
+        <div class="stat-info">
+            <h3>AI Forecast (7d)</h3>
+            <p id="kpi-forecast" style="color:#6366f1;">—</p>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon expenses">💳</div>
+        <div class="stat-info">
+            <h3>Outstanding AR</h3>
+            <p id="kpi-ar" style="color:#f59e0b;">—</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ INSIGHTS + ACTIONS ════════════════════════════════════════════════ -->
+<div class="grid-2-col" style="margin-bottom:2rem;gap:1.25rem;">
+    <!-- Insights -->
+    <div class="card">
+        <div class="card-header">
+            <h3>💡 AI Insights</h3>
+        </div>
+        <div class="card-body">
+            <ul id="insights-list"
+                style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.6rem;">
+                <li style="color:var(--text-muted);font-size:0.88rem;">Analysing patterns…</li>
+            </ul>
+        </div>
+    </div>
+    <!-- Urgent Actions -->
+    <div class="card" style="border:1px solid rgba(244,63,94,0.2);">
+        <div class="card-header">
+            <h3>⚡ Urgent Actions</h3>
+        </div>
+        <div class="card-body">
+            <ul id="actions-list"
+                style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.6rem;">
+                <li style="color:var(--text-muted);font-size:0.88rem;">Loading…</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ CHARTS ROW 1 ══════════════════════════════════════════════════════ -->
+<div class="grid-2-col" style="margin-bottom:2rem;gap:1.25rem;">
+    <div class="card">
+        <div class="card-header"><h3>📊 Revenue Trend (30d)</h3></div>
+        <div class="card-body"><canvas id="chart-revenue" height="200"></canvas></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>🏆 Top Products by Revenue</h3></div>
+        <div class="card-body"><canvas id="chart-products" height="200"></canvas></div>
+    </div>
+</div>
+
+<!-- ═══ CHARTS ROW 2 ══════════════════════════════════════════════════════ -->
+<div class="grid-2-col" style="margin-bottom:2rem;gap:1.25rem;">
+    <div class="card">
+        <div class="card-header"><h3>💳 Payment Status (30d)</h3></div>
+        <div class="card-body" style="display:flex;align-items:center;justify-content:center;">
+            <canvas id="chart-payment" height="220" style="max-width:300px;"></canvas>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>📦 Stock Health</h3></div>
+        <div class="card-body" style="display:flex;align-items:center;justify-content:center;">
+            <canvas id="chart-stock" height="220" style="max-width:300px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ DEBT AGING + MOVEMENT ════════════════════════════════════════════ -->
+<div class="grid-2-col" style="margin-bottom:2rem;gap:1.25rem;">
+    <div class="card">
+        <div class="card-header"><h3>🕰️ Debt Aging (Outstanding)</h3></div>
+        <div class="card-body"><canvas id="chart-aging" height="200"></canvas></div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>🔄 Stock Activity (30d)</h3></div>
+        <div class="card-body"><canvas id="chart-movement" height="200"></canvas></div>
+    </div>
+</div>
+
+<!-- ═══ AI CHAT ════════════════════════════════════════════════════════════ -->
+<div class="card" style="margin-bottom:2rem;">
+    <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
+        <span style="font-size:1.4rem;">💬</span>
+        <div>
+            <h3 style="margin:0;">Ask the AI</h3>
+            <p style="color:var(--text-muted);font-size:0.82rem;margin:0;">
+                Ask anything about your business — the AI has full context.
+            </p>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Message history -->
+        <div id="chat-history"
+             style="min-height:120px;max-height:420px;overflow-y:auto;
+                    display:flex;flex-direction:column;gap:0.75rem;
+                    margin-bottom:1rem;padding-right:4px;">
+        </div>
+
+        <!-- Suggestion chips -->
+        <div id="chat-chips"
+             style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+            <button class="chip" onclick="sendChip(this)">What are my biggest risks?</button>
+            <button class="chip" onclick="sendChip(this)">Which products should I reorder now?</button>
+            <button class="chip" onclick="sendChip(this)">How is my cash collection rate?</button>
+            <button class="chip" onclick="sendChip(this)">Predict my revenue next week</button>
+            <button class="chip" onclick="sendChip(this)">Which customers owe the most?</button>
+            <button class="chip" onclick="sendChip(this)">Give me a full health report</button>
+        </div>
+
+        <!-- Input row -->
+        <div style="display:flex;gap:0.75rem;">
+            <input type="text" id="chat-input" class="form-control"
+                   placeholder="Ask anything about your business…"
+                   onkeydown="if(event.key==='Enter')sendChat()"
+                   style="flex:1;">
+            <button class="btn btn-primary" onclick="sendChat()" id="chat-send-btn">
+                Send ➤
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .chip {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+        border-radius: 99px;
+        padding: 0.3rem 0.75rem;
+        font-size: 0.78rem;
+        cursor: pointer;
+        transition: all var(--trans-fast);
+    }
+    .chip:hover {
+        border-color: var(--accent-primary);
+        color: var(--text-main);
+    }
+    .chat-bubble {
+        padding: 0.65rem 0.9rem;
+        border-radius: var(--radius-md);
+        font-size: 0.88rem;
+        line-height: 1.6;
+        max-width: 88%;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    .chat-bubble.user {
+        background: rgba(99,102,241,0.15);
+        border: 1px solid rgba(99,102,241,0.25);
+        align-self: flex-end;
+        color: var(--text-main);
+    }
+    .chat-bubble.ai {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        align-self: flex-start;
+        color: var(--text-main);
+    }
+    .chat-bubble.thinking {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    .insight-item {
+        display: flex;
+        gap: 0.6rem;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: var(--text-main);
+    }
+    .insight-item::before { content: '•'; color: var(--accent-primary); flex-shrink:0; }
+    .action-item {
+        display: flex;
+        gap: 0.6rem;
+        font-size: 0.88rem;
+        line-height: 1.5;
+        color: var(--text-main);
+    }
+    .action-item::before { content: '→'; color: #f43f5e; flex-shrink:0; }
+</style>
+
+<script>
+const CHART_COLORS = {
+    purple:  '#6366f1', violet: '#a855f7', green: '#10b981',
+    red:     '#f43f5e', amber:  '#f59e0b', blue:  '#3b82f6',
+    muted:   'rgba(255,255,255,0.08)',
+};
+
+let charts = {};
+
+/* ── Boot ──────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+    loadInsights();
+    loadCharts();
+});
+
+async function refreshAll() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true; btn.textContent = '↻ Refreshing…';
+    await fetch('/api/ai/invalidate-cache', { method: 'POST' });
+    Object.values(charts).forEach(c => c.destroy());
+    charts = {};
+    await Promise.all([loadInsights(), loadCharts()]);
+    btn.disabled = false; btn.textContent = '↻ Refresh AI';
+}
+
+/* ── Insights ──────────────────────────────────────────────────────── */
+async function loadInsights() {
+    try {
+        const res  = await fetch('/api/ai/insights');
+        const data = await res.json();
+
+        // Timestamp + KPIs from context
+        document.getElementById('data-timestamp').textContent =
+            'insights as of ' + new Date().toLocaleTimeString();
+
+        // Health banner
+        renderHealthBanner(data);
+
+        // KPI forecast
+        if (data.revenue_forecast_7d) {
+            document.getElementById('kpi-forecast').textContent =
+                '$' + Number(data.revenue_forecast_7d).toLocaleString();
+        }
+
+        // Top insights
+        const ul = document.getElementById('insights-list');
+        if (data.top_insights?.length) {
+            ul.innerHTML = data.top_insights.map(i =>
+                `<li class="insight-item">${escHtml(i)}</li>`
+            ).join('');
+        }
+
+        // Urgent actions
+        const al = document.getElementById('actions-list');
+        if (data.urgent_actions?.length) {
+            al.innerHTML = data.urgent_actions.map(a =>
+                `<li class="action-item">${escHtml(a)}</li>`
+            ).join('');
+        }
+    } catch (e) {
+        console.error('Insights error', e);
+    }
+}
+
+function renderHealthBanner(data) {
+    const banner = document.getElementById('health-banner');
+    const card   = document.getElementById('health-card');
+    const badge  = document.getElementById('health-badge');
+    const rating = (data.health_rating || 'AMBER').toUpperCase();
+
+    const cfg = {
+        GREEN: { bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.3)',  emoji: '🟢', label: 'HEALTHY',  color: '#10b981' },
+        AMBER: { bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)',  emoji: '🟡', label: 'ATTENTION', color: '#f59e0b' },
+        RED:   { bg: 'rgba(244,63,94,0.08)',  border: 'rgba(244,63,94,0.3)',   emoji: '🔴', label: 'CRITICAL',  color: '#f43f5e' },
+    };
+    const c = cfg[rating] || cfg.AMBER;
+
+    card.style.background   = c.bg;
+    card.style.border       = `1px solid ${c.border}`;
+    badge.innerHTML = `<span style="font-size:2rem;">${c.emoji}</span>
+        <div style="font-size:0.75rem;font-weight:700;color:${c.color};text-align:center;letter-spacing:0.05em;">${c.label}</div>`;
+
+    document.getElementById('health-summary').textContent = data.summary || '';
+    document.getElementById('health-reason').textContent  = data.health_reason || '';
+    if (data.top_risk) {
+        document.getElementById('top-risk-badge').textContent = '⚠ ' + data.top_risk;
+    }
+
+    banner.style.display = 'block';
+}
+
+/* ── Charts ────────────────────────────────────────────────────────── */
+async function loadCharts() {
+    await Promise.all([
+        loadContextKpis(),
+        loadRevenueChart(),
+        loadProductsChart(),
+        loadPaymentChart(),
+        loadStockChart(),
+        loadAgingChart(),
+        loadMovementChart(),
+    ]);
+}
+
+async function loadContextKpis() {
+    try {
+        const res  = await fetch('/api/ai/context');
+        const ctx  = await res.json();
+        const fin  = ctx.finance || {};
+        const s30  = ctx.sales?.last_30_days || {};
+        document.getElementById('kpi-revenue').textContent =
+            '$' + (s30.revenue || 0).toLocaleString();
+        document.getElementById('kpi-profit').textContent =
+            '$' + (fin.gross_profit_30d || 0).toLocaleString()
+            + ` (${fin.margin_30d_pct || 0}%)`;
+        document.getElementById('kpi-ar').textContent =
+            '$' + (fin.accounts_receivable || 0).toLocaleString();
+    } catch {}
+}
+
+async function loadRevenueChart() {
+    const res  = await fetch('/api/analytics/revenue-trend');
+    const data = await res.json();
+    const ctx  = document.getElementById('chart-revenue').getContext('2d');
+    charts.revenue = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.date.slice(5)),
+            datasets: [
+                {
+                    label: 'Revenue', data: data.map(d => d.revenue),
+                    borderColor: CHART_COLORS.purple, backgroundColor: 'rgba(99,102,241,0.1)',
+                    fill: true, tension: 0.4, pointRadius: 2,
+                },
+                {
+                    label: 'Collected', data: data.map(d => d.collected),
+                    borderColor: CHART_COLORS.green, backgroundColor: 'transparent',
+                    tension: 0.4, pointRadius: 2, borderDash: [4,3],
+                },
+            ],
+        },
+        options: chartOptions('$'),
+    });
+}
+
+async function loadProductsChart() {
+    const res  = await fetch('/api/analytics/top-products');
+    const data = await res.json();
+    const ctx  = document.getElementById('chart-products').getContext('2d');
+    charts.products = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.name.length > 18 ? d.name.slice(0,18)+'…' : d.name),
+            datasets: [{
+                label: 'Revenue',
+                data:  data.map(d => d.revenue),
+                backgroundColor: data.map((_, i) =>
+                    `hsl(${240 + i * 18},70%,${55 + i * 2}%)`
+                ),
+                borderRadius: 4,
+            }],
+        },
+        options: { ...chartOptions('$'), indexAxis: 'y' },
+    });
+}
+
+async function loadPaymentChart() {
+    const res  = await fetch('/api/analytics/payment-status-breakdown');
+    const data = await res.json();
+    const ctx  = document.getElementById('chart-payment').getContext('2d');
+    const colorMap = { PAID: CHART_COLORS.green, PARTIAL: CHART_COLORS.amber, UNPAID: CHART_COLORS.red };
+    charts.payment = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: data.map(d => d.status),
+            datasets: [{
+                data: data.map(d => d.count),
+                backgroundColor: data.map(d => colorMap[d.status] || CHART_COLORS.muted),
+                borderWidth: 0, hoverOffset: 6,
+            }],
+        },
+        options: doughnutOptions(),
+    });
+}
+
+async function loadStockChart() {
+    const res  = await fetch('/api/analytics/stock-health');
+    const d    = await res.json();
+    const ctx  = document.getElementById('chart-stock').getContext('2d');
+    charts.stock = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Healthy', 'Low Stock', 'Out of Stock'],
+            datasets: [{
+                data: [d.healthy, d.low_stock, d.out_of_stock],
+                backgroundColor: [CHART_COLORS.green, CHART_COLORS.amber, CHART_COLORS.red],
+                borderWidth: 0, hoverOffset: 6,
+            }],
+        },
+        options: doughnutOptions(),
+    });
+}
+
+async function loadAgingChart() {
+    const res  = await fetch('/api/analytics/debt-aging');
+    const data = await res.json();
+    const ctx  = document.getElementById('chart-aging').getContext('2d');
+    charts.aging = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.label + ' days'),
+            datasets: [{
+                label: 'Outstanding ($)',
+                data:  data.map(d => d.amount),
+                backgroundColor: [CHART_COLORS.green, CHART_COLORS.amber, CHART_COLORS.red, '#7f1d1d'],
+                borderRadius: 4,
+            }],
+        },
+        options: chartOptions('$'),
+    });
+}
+
+async function loadMovementChart() {
+    const res  = await fetch('/api/analytics/movement-heatmap');
+    const data = await res.json();
+    const ctx  = document.getElementById('chart-movement').getContext('2d');
+    charts.movement = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.date.slice(5)),
+            datasets: [{
+                label: 'Units moved',
+                data:  data.map(d => d.activity),
+                backgroundColor: 'rgba(168,85,247,0.6)',
+                borderRadius: 3,
+            }],
+        },
+        options: chartOptions(''),
+    });
+}
+
+/* ── Chart option helpers ──────────────────────────────────────────── */
+function chartOptions(prefix) {
+    return {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+        scales: {
+            x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: {
+                ticks: {
+                    color: '#94a3b8', font: { size: 10 },
+                    callback: v => prefix + Number(v).toLocaleString(),
+                },
+                grid: { color: 'rgba(255,255,255,0.04)' },
+            },
+        },
+    };
+}
+
+function doughnutOptions() {
+    return {
+        responsive: true,
+        cutout: '65%',
+        plugins: {
+            legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 11 }, padding: 12 } },
+        },
+    };
+}
+
+/* ── Chat ──────────────────────────────────────────────────────────── */
+function sendChip(btn) {
+    document.getElementById('chat-input').value = btn.textContent;
+    sendChat();
+}
+
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const msg   = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    appendBubble('user', msg);
+
+    const thinking = appendBubble('ai', '⏳ Thinking…', true);
+    document.getElementById('chat-send-btn').disabled = true;
+
+    try {
+        const res    = await fetch('/api/ai/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+        const data = await res.json();
+        thinking.remove();
+        appendBubble('ai', data.reply || data.error || 'No response');
+    } catch {
+        thinking.remove();
+        appendBubble('ai', '⚠ Network error — please try again.');
+    } finally {
+        document.getElementById('chat-send-btn').disabled = false;
+    }
+}
+
+function appendBubble(role, text, thinking = false) {
+    const history = document.getElementById('chat-history');
+    const div     = document.createElement('div');
+    div.className = `chat-bubble ${role}${thinking ? ' thinking' : ''}`;
+    div.textContent = text;
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+    return div;
+}
+
+/* ── Util ──────────────────────────────────────────────────────────── */
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

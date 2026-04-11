@@ -1,13 +1,13 @@
 {% extends "layout.html" %}
-
 {% block title %}Customers - InventoryPro{% endblock %}
 
 {% block content %}
 <header class="page-header">
-    <h2 class="page-title">Customer Relationship Management</h2>
-    <div class="flex items-center gap-2">
-        <input type="text" id="cust-search" class="form-control" placeholder="Search customers..." style="width: 250px;">
-        <button class="btn btn-primary" onclick="openCustModal()">+ Add Customer</button>
+    <h2 class="page-title">Customer Management</h2>
+    <div class="flex items-center gap-2" style="flex-wrap:wrap;justify-content:flex-end;">
+        <input type="text" id="cust-search" class="form-control" placeholder="Search customers..." style="width:240px;">
+        <a href="/export/customers.csv" class="btn btn-secondary">📊 Export CSV</a>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Add Customer</button>
     </div>
 </header>
 
@@ -15,12 +15,12 @@
     <table class="table">
         <thead>
             <tr>
-                <th>Customer Name</th>
+                <th>Name</th>
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Address</th>
                 <th>Outstanding Debt</th>
-                <th>Join Date</th>
+                <th>Joined</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -30,91 +30,301 @@
     </table>
 </div>
 
+<!-- Pagination -->
+<div id="pagination-bar" class="flex items-center gap-2"
+     style="margin-top:1rem;justify-content:center;display:none;">
+    <button class="btn btn-secondary btn-sm" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+    <span id="page-info" style="color:var(--text-muted);font-size:0.9rem;"></span>
+    <button class="btn btn-secondary btn-sm" id="next-btn" onclick="changePage(1)">Next →</button>
+</div>
+
+<!-- ── Add / Edit Customer Modal ─────────────────────────────────────────── -->
 <div id="cust-modal" class="modal">
     <div class="modal-content">
         <span class="close-modal" onclick="closeCustModal()">&times;</span>
-        <h2>Add New Customer</h2>
+        <h2 id="cust-modal-title">Add New Customer</h2>
         <form id="cust-form">
             <div class="form-group">
                 <label>Full Name</label>
                 <input type="text" id="c-name" class="form-control" required>
             </div>
             <div class="grid-2-col">
-                <div class="form-group"><label>Phone Number</label><input type="text" id="c-phone" class="form-control" required></div>
-                <div class="form-group"><label>Email (Optional)</label><input type="email" id="c-email" class="form-control"></div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="text" id="c-phone" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Email (optional)</label>
+                    <input type="email" id="c-email" class="form-control">
+                </div>
             </div>
             <div class="form-group">
-                <label>Physical Address</label>
-                <textarea id="c-address" class="form-control" style="width: 100%; min-height: 80px;"></textarea>
+                <label>Address</label>
+                <textarea id="c-address" class="form-control" style="width:100%;min-height:70px;"></textarea>
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Register Customer</button>
+            <button type="submit" class="btn btn-primary btn-block">Save Customer</button>
         </form>
     </div>
 </div>
 
+<!-- ── Pay Balance Modal ──────────────────────────────────────────────────── -->
+<div id="pay-modal" class="modal">
+    <div class="modal-content" style="max-width:620px;">
+        <span class="close-modal" onclick="closePayModal()">&times;</span>
+        <h2>💳 Pay Balance — <span id="pay-customer-name"></span></h2>
+        <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1.25rem;">
+            Total outstanding: <strong id="pay-total-outstanding" class="text-danger"></strong>
+        </p>
+
+        <!-- Outstanding sales list -->
+        <div id="pay-sales-list" style="display:flex;flex-direction:column;gap:0.75rem;max-height:340px;overflow-y:auto;padding-right:4px;"></div>
+
+        <p id="pay-msg" style="font-size:0.85rem;min-height:1.2em;margin-top:1rem;"></p>
+    </div>
+</div>
+
 <script>
-    document.addEventListener('DOMContentLoaded', loadCustomers);
+    let currentPage = 1;
+    let totalPages  = 1;
 
-    async function loadCustomers() {
-        const res = await fetch('/customers');
-        const data = await res.json();
+    document.addEventListener('DOMContentLoaded', () => loadCustomers());
+
+    /* ── Load / Paginate ──────────────────────────────────────────────── */
+    async function loadCustomers(page = 1) {
+        currentPage = page;
+        const search = document.getElementById('cust-search').value.trim();
+        const params = new URLSearchParams({ page, per_page: 50 });
+        if (search) params.set('search', search);
+
         const tbody = document.getElementById('cust-tbody');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Loading...</td></tr>';
 
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">No customers yet.</td></tr>';
-            return;
+        try {
+            const res  = await fetch(`/customers?${params}`);
+            const json = await res.json();
+            const data = json.data || json;
+            const pg   = json.pagination || {};
+            totalPages = pg.pages || 1;
+            updatePaginationBar(pg);
+
+            if (!data.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No customers found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(c => {
+                const debt     = c.total_debt || 0;
+                const debtCell = debt > 0
+                    ? `<strong class="text-danger">$${debt.toFixed(2)}</strong>
+                       <button class="btn btn-warning btn-sm" style="margin-left:0.5rem;"
+                               onclick="openPayModal(${c.id}, '${escHtml(c.full_name)}')">
+                           💳 Pay
+                       </button>`
+                    : `<span class="text-success">$0.00</span>`;
+
+                return `
+                <tr>
+                    <td><strong>${escHtml(c.full_name)}</strong></td>
+                    <td>${escHtml(c.phone)}</td>
+                    <td>${escHtml(c.email || '—')}</td>
+                    <td><small>${escHtml(c.address || '—')}</small></td>
+                    <td>${debtCell}</td>
+                    <td>${new Date(c.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm"
+                                onclick='openEditModal(${JSON.stringify(c)})'>Edit</button>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Error loading customers</td></tr>';
         }
-
-        tbody.innerHTML = data.map(c => `
-            <tr>
-                <td><strong>${c.full_name}</strong></td>
-                <td>${c.phone}</td>
-                <td>${c.email || 'N/A'}</td>
-                <td><small>${c.address || 'N/A'}</small></td>
-                <td class="${c.total_debt > 0 ? 'text-danger' : 'text-success'}"><strong>$${(c.total_debt || 0).toFixed(2)}</strong></td>
-                <td>${new Date(c.created_at).toLocaleDateString()}</td>
-                <td>
-                    <button class="btn btn-secondary btn-sm">Edit</button>
-                </td>
-            </tr>
-        `).join('');
     }
 
-    function openCustModal() { document.getElementById('cust-modal').style.display = 'block'; }
-    function closeCustModal() { document.getElementById('cust-modal').style.display = 'none'; }
+    function updatePaginationBar(pg) {
+        const bar = document.getElementById('pagination-bar');
+        if (!pg.total || pg.pages <= 1) { bar.style.display = 'none'; return; }
+        bar.style.display = 'flex';
+        document.getElementById('page-info').textContent =
+            `Page ${pg.page} of ${pg.pages} (${pg.total} total)`;
+        document.getElementById('prev-btn').disabled = pg.page <= 1;
+        document.getElementById('next-btn').disabled = pg.page >= pg.pages;
+    }
+
+    function changePage(dir) {
+        const next = currentPage + dir;
+        if (next < 1 || next > totalPages) return;
+        loadCustomers(next);
+    }
+
+    /* ── Add / Edit ───────────────────────────────────────────────────── */
+    function openAddModal() {
+        document.getElementById('cust-modal-title').textContent = 'Add New Customer';
+        document.getElementById('cust-form').reset();
+        document.getElementById('cust-form').dataset.editId = '';
+        document.getElementById('cust-modal').style.display = 'block';
+    }
+
+    function openEditModal(c) {
+        document.getElementById('cust-modal-title').textContent = 'Edit Customer';
+        document.getElementById('c-name').value    = c.full_name;
+        document.getElementById('c-phone').value   = c.phone;
+        document.getElementById('c-email').value   = c.email || '';
+        document.getElementById('c-address').value = c.address || '';
+        document.getElementById('cust-form').dataset.editId = c.id;
+        document.getElementById('cust-modal').style.display = 'block';
+    }
+
+    function closeCustModal() {
+        document.getElementById('cust-modal').style.display = 'none';
+    }
 
     document.getElementById('cust-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const cData = {
-            full_name: document.getElementById('c-name').value,
-            phone: document.getElementById('c-phone').value,
-            email: document.getElementById('c-email').value || null,
-            address: document.getElementById('c-address').value || null
+        const editId = e.target.dataset.editId;
+        const body   = {
+            full_name : document.getElementById('c-name').value,
+            phone     : document.getElementById('c-phone').value,
+            email     : document.getElementById('c-email').value || null,
+            address   : document.getElementById('c-address').value || null,
         };
+        const res    = await fetch(editId ? `/customers/${editId}` : '/customers', {
+            method : editId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify(body),
+        });
+        const result = await res.json();
+        if (res.ok) { closeCustModal(); loadCustomers(currentPage); }
+        else         alert(result.error || 'Failed to save customer');
+    });
+
+    /* ── Pay Balance Modal ────────────────────────────────────────────── */
+    async function openPayModal(customerId, customerName) {
+        document.getElementById('pay-customer-name').textContent = customerName;
+        document.getElementById('pay-msg').textContent = '';
+        document.getElementById('pay-sales-list').innerHTML =
+            '<p style="color:var(--text-muted);">Loading outstanding sales…</p>';
+        document.getElementById('pay-modal').style.display = 'block';
 
         try {
-            const res = await fetch('/customers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(cData)
-            });
-            if (res.ok) {
-                closeCustModal();
-                loadCustomers();
-                document.getElementById('cust-form').reset();
-            } else {
-                const result = await res.json();
-                alert(result.error || 'Failed to add customer');
+            const res  = await fetch(`/customers/${customerId}/outstanding-sales`);
+            const data = await res.json();
+
+            document.getElementById('pay-total-outstanding').textContent =
+                `$${data.total_outstanding.toFixed(2)}`;
+
+            if (!data.sales.length) {
+                document.getElementById('pay-sales-list').innerHTML =
+                    '<p class="text-success">No outstanding balances — all paid!</p>';
+                return;
             }
-        } catch (err) { alert('Network error'); }
+
+            document.getElementById('pay-sales-list').innerHTML = data.sales.map(s => `
+                <div style="background:var(--bg-elevated);border-radius:var(--radius-md);
+                            padding:1rem;border:1px solid var(--border-subtle);">
+                    <div class="flex justify-between" style="margin-bottom:0.5rem;">
+                        <span style="font-size:0.85rem;color:var(--text-muted);">
+                            Sale #${s.id} &nbsp;·&nbsp; ${s.sale_date}
+                        </span>
+                        <span class="badge ${s.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger'}">
+                            ${s.payment_status}
+                        </span>
+                    </div>
+                    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.5rem;">
+                        ${escHtml(s.items_summary || '—')}
+                    </p>
+                    <div class="flex justify-between" style="font-size:0.9rem;margin-bottom:0.75rem;">
+                        <span>Total: <strong>$${s.total_amount.toFixed(2)}</strong></span>
+                        <span>Paid: <strong class="text-success">$${s.amount_paid.toFixed(2)}</strong></span>
+                        <span>Balance: <strong class="text-danger">$${s.balance_due.toFixed(2)}</strong></span>
+                    </div>
+                    <div class="flex gap-2" style="align-items:center;">
+                        <input type="number" id="pay-amt-${s.id}" class="form-control"
+                               placeholder="Amount to pay" step="0.01" min="0.01"
+                               max="${s.balance_due}" style="max-width:180px;">
+                        <button class="btn btn-primary btn-sm"
+                                onclick="submitPayment(${s.id}, ${s.balance_due})">
+                            Pay Instalment
+                        </button>
+                        <button class="btn btn-secondary btn-sm"
+                                onclick="submitPayment(${s.id}, ${s.balance_due}, true)">
+                            Pay Full ($${s.balance_due.toFixed(2)})
+                        </button>
+                    </div>
+                    <p id="pay-sale-msg-${s.id}" style="font-size:0.82rem;min-height:1em;margin-top:0.4rem;"></p>
+                </div>
+            `).join('');
+        } catch {
+            document.getElementById('pay-sales-list').innerHTML =
+                '<p class="text-danger">Failed to load outstanding sales.</p>';
+        }
+    }
+
+    async function submitPayment(saleId, balanceDue, payFull = false) {
+        const input  = document.getElementById(`pay-amt-${saleId}`);
+        const msgEl  = document.getElementById(`pay-sale-msg-${saleId}`);
+        const amount = payFull ? balanceDue : parseFloat(input.value);
+
+        if (!amount || amount <= 0) { msgEl.textContent = 'Enter a valid amount.'; return; }
+        if (amount > balanceDue + 0.001) {
+            msgEl.textContent = `Amount exceeds balance ($${balanceDue.toFixed(2)}).`;
+            return;
+        }
+
+        msgEl.textContent = 'Processing…';
+        try {
+            const res    = await fetch(`/sales/${saleId}/payment`, {
+                method : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body   : JSON.stringify({ additional_payment: amount }),
+            });
+            const result = await res.json();
+            if (res.ok) {
+                msgEl.style.color   = 'var(--text-success, #10b981)';
+                msgEl.textContent   = `✓ $${amount.toFixed(2)} recorded. New balance: $${result.new_balance.toFixed(2)}`;
+                input.value         = '';
+                // Refresh the modal after a short pause so the owner can see the update
+                setTimeout(() => {
+                    const name = document.getElementById('pay-customer-name').textContent;
+                    // Re-derive customerId from the outstanding-sales URL we called
+                    const listEl = document.getElementById('pay-sales-list');
+                    const cid    = listEl.dataset.customerId;
+                    if (cid) openPayModal(cid, name);
+                    loadCustomers(currentPage); // refresh the table debt column
+                }, 1200);
+            } else {
+                msgEl.style.color = '#f43f5e';
+                msgEl.textContent = result.error || 'Payment failed.';
+            }
+        } catch {
+            msgEl.style.color = '#f43f5e';
+            msgEl.textContent = 'Network error.';
+        }
+    }
+
+    function closePayModal() {
+        document.getElementById('pay-modal').style.display = 'none';
+    }
+
+    /* Store customerId on the list container so submitPayment can refresh */
+    const _origOpenPayModal = openPayModal;
+    window.openPayModal = async function(customerId, customerName) {
+        document.getElementById('pay-sales-list').dataset.customerId = customerId;
+        await _origOpenPayModal(customerId, customerName);
+    };
+
+    /* ── Search ───────────────────────────────────────────────────────── */
+    let _searchTimer;
+    document.getElementById('cust-search').addEventListener('input', () => {
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => loadCustomers(1), 300);
     });
 
-    document.getElementById('cust-search').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#cust-tbody tr');
-        rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
-        });
-    });
+    /* ── Util ─────────────────────────────────────────────────────────── */
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
 </script>
 {% endblock %}

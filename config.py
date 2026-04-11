@@ -23,6 +23,16 @@ class Config:
     # Disable FSAModifications tracking (saves resources)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # File upload limit (5 MB)
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+
     # Flask environment
     FLASK_ENV = os.getenv('FLASK_ENV', 'development')
     DEBUG = os.getenv('FLASK_DEBUG', 'True') == 'True'
+
+    # ── AI & Notifications ────────────────────────────────────────────
+    GROQ_API_KEY          = os.getenv('GROQ_API_KEY', '')
+    TELEGRAM_BOT_TOKEN    = os.getenv('TELEGRAM_BOT_TOKEN', '')
+    TELEGRAM_CHAT_ID      = os.getenv('TELEGRAM_CHAT_ID', '')
+    # Optional: a random secret used to verify Telegram webhook calls
+    TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')

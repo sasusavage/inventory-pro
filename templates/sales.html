@@ -4,10 +4,19 @@
 
 {% block content %}
 <header class="page-header">
-    <h2 class="page-title">Sales Inventory & History</h2>
-    <div class="flex items-center gap-2">
-        <input type="text" id="sales-search" class="form-control" placeholder="Search sales..." style="width: 250px;">
-        <button class="btn btn-secondary" onclick="exportCSV()">📊 Export CSV</button>
+    <h2 class="page-title">Sales & History</h2>
+    <div class="flex items-center gap-2" style="flex-wrap:wrap;justify-content:flex-end;">
+        <input type="text" id="sales-search" class="form-control" placeholder="Search customer..." style="width:200px;">
+        <select id="status-filter" class="form-control" style="width:130px;">
+            <option value="">All Statuses</option>
+            <option value="PAID">Paid</option>
+            <option value="PARTIAL">Partial</option>
+            <option value="UNPAID">Unpaid</option>
+        </select>
+        <input type="date" id="date-from" class="form-control" style="width:150px;" title="From date">
+        <input type="date" id="date-to" class="form-control" style="width:150px;" title="To date">
+        <button class="btn btn-secondary" onclick="applyFilters()">Filter</button>
+        <a href="/export/sales.csv" class="btn btn-secondary">📊 Export CSV</a>
     </div>
 </header>
 
@@ -17,7 +26,7 @@
             <tr>
                 <th>Date</th>
                 <th>Customer</th>
-                <th>Items (Qty)</th>
+                <th>Items</th>
                 <th>Total</th>
                 <th>Paid</th>
                 <th>Balance</th>
@@ -31,65 +40,95 @@
     </table>
 </div>
 
+<!-- Pagination -->
+<div id="pagination-bar" class="flex items-center gap-2" style="margin-top:1rem;justify-content:center;display:none;">
+    <button class="btn btn-secondary btn-sm" id="prev-btn" onclick="changePage(-1)">← Prev</button>
+    <span id="page-info" style="color:var(--text-muted);font-size:0.9rem;"></span>
+    <button class="btn btn-secondary btn-sm" id="next-btn" onclick="changePage(1)">Next →</button>
+</div>
+
 <script>
-    document.addEventListener('DOMContentLoaded', loadSales);
+    let currentPage = 1;
+    let totalPages = 1;
 
-    async function loadSales() {
-        const res = await fetch('/sales');
-        const sales = await res.json();
+    document.addEventListener('DOMContentLoaded', () => loadSales());
+
+    async function loadSales(page = 1) {
+        currentPage = page;
+        const search = document.getElementById('sales-search').value.trim();
+        const status = document.getElementById('status-filter').value;
+        const dateFrom = document.getElementById('date-from').value;
+        const dateTo = document.getElementById('date-to').value;
+
+        const params = new URLSearchParams({ page, per_page: 50 });
+        if (search) params.set('search', search);
+        if (status) params.set('status', status);
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo + 'T23:59:59');
+
         const tbody = document.getElementById('sales-tbody');
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading...</td></tr>';
 
-        if (sales.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">No sales history yet.</td></tr>';
-            return;
-        }
+        try {
+            const res = await fetch(`/sales?${params}`);
+            const json = await res.json();
 
-        tbody.innerHTML = sales.map(s => {
-            const statusClass = s.payment_status === 'PAID' ? 'badge-success' : (s.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger');
-            const itemsSummary = s.items.map(item => `${item.product_name} (x${item.quantity})`).join(', ');
-            
-            return `
-                <tr>
-                    <td>${new Date(s.sale_date).toLocaleString()}</td>
-                    <td><strong>${s.customer_name}</strong></td>
-                    <td><small>${itemsSummary}</small></td>
-                    <td>$${s.total_amount.toFixed(2)}</td>
-                    <td>$${s.amount_paid.toFixed(2)}</td>
-                    <td class="${s.balance_due > 0 ? 'text-danger' : 'text-success'}">$${s.balance_due.toFixed(2)}</td>
-                    <td><span class="badge ${statusClass}">${s.payment_status}</span></td>
-                    <td>
-                        <div class="flex gap-2">
-                            <a href="/sales/${s.id}/invoice" class="btn btn-secondary btn-sm" target="_blank">📄 Receipt</a>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
+            const sales = json.data || [];
+            const pagination = json.pagination || {};
+            totalPages = pagination.pages || 1;
 
-    document.getElementById('sales-search').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#sales-tbody tr');
-        rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
-        });
-    });
+            updatePaginationBar(pagination);
 
-    function exportCSV() {
-        // Simple CSV export logic
-        let csv = 'Date,Customer,Total,Paid,Balance,Status\n';
-        document.querySelectorAll('#sales-tbody tr').forEach(row => {
-            const cells = row.querySelectorAll('td');
-            if (cells.length > 0) {
-                csv += Array.from(cells).slice(0, 7).map(c => c.innerText.replace(/,/g, '')).join(',') + '\n';
+            if (sales.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No sales found.</td></tr>';
+                return;
             }
-        });
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'sales_report.csv';
-        a.click();
+
+            tbody.innerHTML = sales.map(s => {
+                const statusClass = s.payment_status === 'PAID' ? 'badge-success'
+                    : s.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger';
+                const itemsSummary = (s.items || []).map(i => `${i.product_name} (x${i.quantity})`).join(', ') || '—';
+
+                return `
+                    <tr>
+                        <td>${new Date(s.sale_date).toLocaleString()}</td>
+                        <td><strong>${s.customer_name}</strong></td>
+                        <td><small>${itemsSummary}</small></td>
+                        <td>$${s.total_amount.toFixed(2)}</td>
+                        <td>$${s.amount_paid.toFixed(2)}</td>
+                        <td class="${s.balance_due > 0 ? 'text-danger' : 'text-success'}">$${s.balance_due.toFixed(2)}</td>
+                        <td><span class="badge ${statusClass}">${s.payment_status}</span></td>
+                        <td>
+                            <a href="/sales/${s.id}/invoice" class="btn btn-secondary btn-sm" target="_blank">📄 Receipt</a>
+                        </td>
+                    </tr>`;
+            }).join('');
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading sales</td></tr>';
+        }
     }
+
+    function updatePaginationBar(pagination) {
+        const bar = document.getElementById('pagination-bar');
+        if (!pagination.total || pagination.pages <= 1) { bar.style.display = 'none'; return; }
+        bar.style.display = 'flex';
+        document.getElementById('page-info').textContent =
+            `Page ${pagination.page} of ${pagination.pages} (${pagination.total} records)`;
+        document.getElementById('prev-btn').disabled = pagination.page <= 1;
+        document.getElementById('next-btn').disabled = pagination.page >= pagination.pages;
+    }
+
+    function changePage(dir) {
+        const next = currentPage + dir;
+        if (next < 1 || next > totalPages) return;
+        loadSales(next);
+    }
+
+    function applyFilters() { loadSales(1); }
+
+    // Trigger filter on Enter in search box
+    document.getElementById('sales-search').addEventListener('keydown', e => {
+        if (e.key === 'Enter') applyFilters();
+    });
 </script>
 {% endblock %}

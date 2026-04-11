@@ -1,0 +1,185 @@
+{% extends "layout.html" %}
+{% block title %}Settings - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">⚙️ App Settings</h2>
+</header>
+
+<div style="max-width: 680px; display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <!-- Telegram Notifications -->
+    <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
+            <span style="font-size:1.5rem;">✈️</span>
+            <div>
+                <h3 style="margin:0;">Telegram Notifications</h3>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                    Receive low-stock alerts and sale summaries on your phone.
+                </p>
+            </div>
+            <span id="tg-status-badge" style="margin-left:auto;"></span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:1rem;">
+
+            <div class="card" style="background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);padding:1rem;">
+                <p style="font-size:0.85rem;color:var(--text-muted);margin:0;line-height:1.7;">
+                    <strong style="color:var(--text-main);">How to set up:</strong><br>
+                    1. Open Telegram → search <code>@BotFather</code> → type <code>/newbot</code><br>
+                    2. Copy the <b>Bot Token</b> it gives you and paste below<br>
+                    3. Start a chat with your bot, then visit<br>
+                    &nbsp;&nbsp;&nbsp;<code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code><br>
+                    &nbsp;&nbsp;&nbsp;to find your <b>Chat ID</b> (the <code>"id"</code> field inside <code>"chat"</code>)
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label>Bot Token</label>
+                <input type="password" id="tg-token" class="form-control" placeholder="1234567890:AAXXXXXX…" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Chat ID</label>
+                <input type="text" id="tg-chat-id" class="form-control" placeholder="-100123456789 or your personal ID">
+            </div>
+
+            <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="saveTelegram()">💾 Save Credentials</button>
+                <button class="btn btn-secondary" onclick="testTelegram()">📨 Send Test Message</button>
+            </div>
+            <p id="tg-msg" style="font-size:0.85rem;min-height:1.2em;"></p>
+        </div>
+    </div>
+
+    <!-- Store Info -->
+    <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
+            <span style="font-size:1.5rem;">🏪</span>
+            <div>
+                <h3 style="margin:0;">Store Info</h3>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                    Shown on invoices and reports.
+                </p>
+            </div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:1rem;">
+            <div class="grid-2-col">
+                <div class="form-group">
+                    <label>Store Name</label>
+                    <input type="text" id="store-name" class="form-control" placeholder="My Shop">
+                </div>
+                <div class="form-group">
+                    <label>Currency Symbol</label>
+                    <input type="text" id="store-currency" class="form-control" placeholder="$" style="width:80px;">
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="saveStoreInfo()">💾 Save Store Info</button>
+            </div>
+            <p id="store-msg" style="font-size:0.85rem;min-height:1.2em;"></p>
+        </div>
+    </div>
+
+    <!-- Sale Notifications Toggle -->
+    <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
+            <span style="font-size:1.5rem;">💰</span>
+            <div>
+                <h3 style="margin:0;">Sale Alerts</h3>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                    Get a Telegram ping for every completed sale.
+                </p>
+            </div>
+            <label style="margin-left:auto;display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                <input type="checkbox" id="notify-sales" style="width:18px;height:18px;cursor:pointer;">
+                <span style="font-size:0.9rem;color:var(--text-muted);">Enabled</span>
+            </label>
+        </div>
+        <div class="card-body">
+            <button class="btn btn-primary" onclick="saveSaleToggle()">💾 Save</button>
+            <p id="sale-msg" style="font-size:0.85rem;min-height:1.2em;margin-top:0.5rem;"></p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', loadSettings);
+
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            const d = await res.json();
+
+            if (d.telegram_bot_token) document.getElementById('tg-token').placeholder = d.telegram_bot_token;
+            if (d.telegram_chat_id) document.getElementById('tg-chat-id').value = d.telegram_chat_id;
+            if (d.store_name) document.getElementById('store-name').value = d.store_name;
+            if (d.store_currency) document.getElementById('store-currency').value = d.store_currency;
+            document.getElementById('notify-sales').checked = d.notify_on_sale === '1';
+
+            const badge = document.getElementById('tg-status-badge');
+            badge.innerHTML = d.telegram_configured
+                ? '<span class="badge badge-success">Connected</span>'
+                : '<span class="badge badge-danger">Not configured</span>';
+        } catch (e) { console.error(e); }
+    }
+
+    async function saveTelegram() {
+        const token = document.getElementById('tg-token').value.trim();
+        const chatId = document.getElementById('tg-chat-id').value.trim();
+        const msg = document.getElementById('tg-msg');
+
+        if (!token && !chatId) { msg.textContent = 'Enter at least one field to save.'; return; }
+
+        const body = {};
+        if (token) body.telegram_bot_token = token;
+        if (chatId) body.telegram_chat_id = chatId;
+
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const d = await res.json();
+        msg.style.color = res.ok ? 'var(--text-success, #10b981)' : '#f43f5e';
+        msg.textContent = res.ok ? '✓ ' + d.message : d.error;
+        if (res.ok) loadSettings();
+    }
+
+    async function testTelegram() {
+        const msg = document.getElementById('tg-msg');
+        msg.textContent = 'Sending…';
+        const res = await fetch('/api/settings/test-telegram', { method: 'POST' });
+        const d = await res.json();
+        msg.style.color = res.ok ? 'var(--text-success, #10b981)' : '#f43f5e';
+        msg.textContent = res.ok ? '✓ ' + d.message : '✗ ' + d.error;
+    }
+
+    async function saveStoreInfo() {
+        const msg = document.getElementById('store-msg');
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                store_name: document.getElementById('store-name').value,
+                store_currency: document.getElementById('store-currency').value,
+            }),
+        });
+        const d = await res.json();
+        msg.style.color = res.ok ? 'var(--text-success, #10b981)' : '#f43f5e';
+        msg.textContent = res.ok ? '✓ ' + d.message : d.error;
+    }
+
+    async function saveSaleToggle() {
+        const msg = document.getElementById('sale-msg');
+        const enabled = document.getElementById('notify-sales').checked;
+        const res = await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notify_on_sale: enabled ? '1' : '0' }),
+        });
+        const d = await res.json();
+        msg.style.color = res.ok ? 'var(--text-success, #10b981)' : '#f43f5e';
+        msg.textContent = res.ok ? '✓ ' + d.message : d.error;
+    }
+</script>
+{% endblock %}
