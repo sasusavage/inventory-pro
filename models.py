@@ -181,3 +181,65 @@ class Refund(db.Model):
 
     sale = db.relationship('Sale')
     product = db.relationship('Product')
+
+
+class Category(db.Model):
+    """Product categories for grouping and POS filtering."""
+    __tablename__ = 'categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    color = db.Column(db.String(20), default='#4f46e5')  # hex colour for badge
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    products = db.relationship('Product', backref='category', lazy=True)
+
+
+# Add category_id FK to Product
+Product.category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True, index=True)
+
+
+class LoyaltyPoint(db.Model):
+    """Tracks loyalty point balance per customer. Points earned on every sale."""
+    __tablename__ = 'loyalty_points'
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=False, index=True)
+    points = db.Column(db.Integer, nullable=False)  # positive = earned, negative = redeemed
+    reason = db.Column(db.String(120), nullable=True)
+    reference_id = db.Column(db.Integer, nullable=True)  # sale_id
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    customer = db.relationship('Customer', backref=db.backref('loyalty_points', lazy=True))
+
+    @classmethod
+    def balance(cls, customer_id):
+        from sqlalchemy import func
+        result = db.session.query(func.coalesce(func.sum(cls.points), 0)).filter_by(customer_id=customer_id).scalar()
+        return int(result)
+
+
+class Expense(db.Model):
+    """Business expense ledger."""
+    __tablename__ = 'expenses'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    category = db.Column(db.String(60), nullable=True)  # Rent, Salary, Utilities, etc.
+    note = db.Column(db.Text, nullable=True)
+    expense_date = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class StockAdjustment(db.Model):
+    """Manual stock corrections with reason and audit trail."""
+    __tablename__ = 'stock_adjustments'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    quantity_before = db.Column(db.Integer, nullable=False)
+    quantity_after = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.String(60), nullable=False)  # Damage, Theft, Correction, Recount
+    note = db.Column(db.Text, nullable=True)
+    adjusted_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    product = db.relationship('Product', backref=db.backref('adjustments', lazy=True))
+    user = db.relationship('User')

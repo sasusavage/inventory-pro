@@ -1,0 +1,120 @@
+{% extends "layout.html" %}
+{% block title %}Product Categories - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">Product Categories</h2>
+    <button class="btn btn-primary" onclick="openModal()">+ Add Category</button>
+</header>
+
+<div id="categories-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:1rem; margin-bottom:1.5rem;"></div>
+
+<!-- Modal -->
+<div id="cat-modal" class="modal">
+    <div class="modal-content" style="max-width:400px;">
+        <div class="modal-header">
+            <h2 id="modal-title" style="margin:0; font-size:1.1rem; font-weight:700;">Add Category</h2>
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="cat-form">
+            <input type="hidden" id="cat-id">
+            <div class="form-group">
+                <label>Name *</label>
+                <input type="text" id="cat-name" class="form-control" required placeholder="e.g. Electronics">
+            </div>
+            <div class="form-group">
+                <label>Badge Colour</label>
+                <div style="display:flex; gap:0.75rem; align-items:center;">
+                    <input type="color" id="cat-color" value="#4f46e5" style="width:48px; height:36px; border:1px solid var(--border-subtle); border-radius:6px; cursor:pointer; padding:2px;">
+                    <span id="color-preview" style="padding:4px 12px; border-radius:99px; font-size:0.78rem; font-weight:700; color:#fff; background:#4f46e5;">Preview</span>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="save-btn">Save Category</button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadCategories();
+    document.getElementById('cat-color').addEventListener('input', (e) => {
+        document.getElementById('color-preview').style.background = e.target.value;
+    });
+    document.getElementById('cat-form').addEventListener('submit', saveCategory);
+});
+
+async function loadCategories() {
+    const res = await fetch('/api/categories');
+    const cats = await res.json();
+    const grid = document.getElementById('categories-grid');
+    if (!cats.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:3rem; color:var(--text-muted);">No categories yet. Add one to start organising products.</div>';
+        return;
+    }
+    grid.innerHTML = cats.map(c => `
+        <div style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:12px; padding:1.25rem; box-shadow:var(--shadow-soft);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem;">
+                <span style="background:${c.color}; color:#fff; padding:4px 12px; border-radius:99px; font-size:0.78rem; font-weight:700;">${c.name}</span>
+                <div style="display:flex; gap:0.4rem;">
+                    <button class="btn btn-secondary btn-sm" onclick='editCategory(${JSON.stringify(c)})'>Edit</button>
+                    <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;" onclick="deleteCategory(${c.id}, '${c.name}')">Delete</button>
+                </div>
+            </div>
+            <div style="color:var(--text-muted); font-size:0.85rem;">${c.product_count} product${c.product_count !== 1 ? 's' : ''}</div>
+        </div>
+    `).join('');
+}
+
+function openModal() {
+    document.getElementById('modal-title').textContent = 'Add Category';
+    document.getElementById('cat-id').value = '';
+    document.getElementById('cat-form').reset();
+    document.getElementById('cat-color').value = '#4f46e5';
+    document.getElementById('color-preview').style.background = '#4f46e5';
+    document.getElementById('cat-modal').classList.add('active');
+}
+
+function editCategory(c) {
+    document.getElementById('modal-title').textContent = 'Edit Category';
+    document.getElementById('cat-id').value = c.id;
+    document.getElementById('cat-name').value = c.name;
+    document.getElementById('cat-color').value = c.color;
+    document.getElementById('color-preview').style.background = c.color;
+    document.getElementById('cat-modal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('cat-modal').classList.remove('active');
+}
+
+async function saveCategory(e) {
+    e.preventDefault();
+    const id = document.getElementById('cat-id').value;
+    const data = { name: document.getElementById('cat-name').value.trim(), color: document.getElementById('cat-color').value };
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    try {
+        const res = await fetch(id ? `/api/categories/${id}` : '/api/categories', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed');
+        window.showToastNotification(id ? 'Category updated!' : 'Category added!');
+        closeModal();
+        loadCategories();
+    } catch (err) {
+        window.showToastNotification(err.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteCategory(id, name) {
+    if (!confirm(`Delete category "${name}"? Products will be uncategorised.`)) return;
+    const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+    if (res.ok) { window.showToastNotification('Category deleted'); loadCategories(); }
+}
+</script>
+{% endblock %}

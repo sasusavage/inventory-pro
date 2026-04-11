@@ -1,0 +1,205 @@
+{% extends "layout.html" %}
+{% block title %}Stock Adjustments - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">Stock Adjustments & Audit Log</h2>
+    <button class="btn btn-primary" onclick="openModal()">+ New Adjustment</button>
+</header>
+
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:640px;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Product</th>
+                <th>Before</th>
+                <th>After</th>
+                <th>Change</th>
+                <th>Reason</th>
+                <th>Note</th>
+                <th>By</th>
+            </tr>
+        </thead>
+        <tbody id="adj-tbody">
+            <tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+<div id="adj-pagination" class="pagination"></div>
+
+<!-- Modal -->
+<div id="adj-modal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2 style="margin:0; font-size:1.1rem; font-weight:700;">Adjust Stock</h2>
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="adj-form">
+            <div class="form-group">
+                <label>Product *</label>
+                <select id="adj-product" class="form-control" required onchange="loadCurrentStock()">
+                    <option value="">-- Select Product --</option>
+                </select>
+            </div>
+            <div id="current-stock-info" style="display:none; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:8px; padding:0.75rem 1rem; margin-bottom:1rem; font-size:0.88rem;">
+                Current stock: <strong id="current-stock-val">—</strong> units
+            </div>
+            <div class="grid-2-col">
+                <div class="form-group">
+                    <label>New Quantity *</label>
+                    <input type="number" id="adj-qty" class="form-control" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Reason *</label>
+                    <select id="adj-reason" class="form-control" required>
+                        <option value="">-- Select --</option>
+                        {% for r in reasons %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Note</label>
+                <textarea id="adj-note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+            </div>
+            <div id="change-preview" style="display:none; border-radius:8px; padding:0.7rem 1rem; margin-bottom:1rem; font-weight:700; font-size:0.9rem;"></div>
+            <button type="submit" class="btn btn-primary btn-block" id="save-btn">Apply Adjustment</button>
+        </form>
+    </div>
+</div>
+
+<script>
+let products = [];
+let currentPage = 1;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadLog();
+    loadProducts();
+    document.getElementById('adj-qty').addEventListener('input', previewChange);
+    document.getElementById('adj-form').addEventListener('submit', saveAdjustment);
+});
+
+async function loadLog(page = 1) {
+    currentPage = page;
+    const res = await fetch(`/api/stock-adjustments?page=${page}&per_page=50`);
+    const json = await res.json();
+    const tbody = document.getElementById('adj-tbody');
+    if (!json.data.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">No adjustments recorded yet.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = json.data.map(a => {
+        const change = a.change;
+        const changeColor = change > 0 ? '#059669' : '#dc2626';
+        const changeStr = change > 0 ? `+${change}` : `${change}`;
+        return `
+            <tr>
+                <td style="color:var(--text-muted); font-size:0.82rem;">${a.adjusted_at}</td>
+                <td style="font-weight:600;">${a.product_name}</td>
+                <td>${a.quantity_before}</td>
+                <td><strong>${a.quantity_after}</strong></td>
+                <td><span style="font-weight:700; color:${changeColor};">${changeStr}</span></td>
+                <td><span class="badge badge-warning">${a.reason}</span></td>
+                <td style="color:var(--text-muted); font-size:0.82rem;">${a.note || '—'}</td>
+                <td style="color:var(--text-muted); font-size:0.82rem;">${a.adjusted_by}</td>
+            </tr>`;
+    }).join('');
+    renderPagination(json.pagination);
+}
+
+async function loadProducts() {
+    const res = await fetch('/products?per_page=500');
+    const json = await res.json();
+    products = Array.isArray(json) ? json : (json.data || []);
+    const sel = document.getElementById('adj-product');
+    products.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.name} (Stock: ${p.quantity_in_stock})`;
+        opt.dataset.stock = p.quantity_in_stock;
+        sel.appendChild(opt);
+    });
+}
+
+function loadCurrentStock() {
+    const sel = document.getElementById('adj-product');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt.value) { document.getElementById('current-stock-info').style.display = 'none'; return; }
+    document.getElementById('current-stock-val').textContent = opt.dataset.stock;
+    document.getElementById('current-stock-info').style.display = 'block';
+    document.getElementById('adj-qty').value = opt.dataset.stock;
+    previewChange();
+}
+
+function previewChange() {
+    const sel = document.getElementById('adj-product');
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt.value) return;
+    const before = parseInt(opt.dataset.stock);
+    const after = parseInt(document.getElementById('adj-qty').value) || 0;
+    const change = after - before;
+    const el = document.getElementById('change-preview');
+    if (isNaN(after)) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    if (change === 0) {
+        el.style.background = '#f8fafc'; el.style.color = '#64748b'; el.style.border = '1px solid #e2e8f0';
+        el.textContent = 'No change';
+    } else if (change > 0) {
+        el.style.background = '#f0fdf4'; el.style.color = '#15803d'; el.style.border = '1px solid #bbf7d0';
+        el.textContent = `Stock will increase by +${change} (${before} → ${after})`;
+    } else {
+        el.style.background = '#fff7ed'; el.style.color = '#b45309'; el.style.border = '1px solid #fed7aa';
+        el.textContent = `Stock will decrease by ${change} (${before} → ${after})`;
+    }
+}
+
+function renderPagination(pg) {
+    const el = document.getElementById('adj-pagination');
+    if (!pg || pg.pages <= 1) { el.innerHTML = ''; return; }
+    let html = `<button ${pg.page <= 1 ? 'disabled' : ''} onclick="loadLog(${pg.page - 1})">← Prev</button>`;
+    for (let i = 1; i <= pg.pages; i++) {
+        html += `<button class="${i === pg.page ? 'active' : ''}" onclick="loadLog(${i})">${i}</button>`;
+    }
+    html += `<button ${pg.page >= pg.pages ? 'disabled' : ''} onclick="loadLog(${pg.page + 1})">Next →</button>`;
+    el.innerHTML = html;
+}
+
+function openModal() { document.getElementById('adj-modal').classList.add('active'); }
+function closeModal() { document.getElementById('adj-modal').classList.remove('active'); }
+
+async function saveAdjustment(e) {
+    e.preventDefault();
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/stock-adjustments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                product_id: parseInt(document.getElementById('adj-product').value),
+                new_quantity: parseInt(document.getElementById('adj-qty').value),
+                reason: document.getElementById('adj-reason').value,
+                note: document.getElementById('adj-note').value.trim(),
+            }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed');
+        window.showToastNotification(result.message || 'Adjustment saved!');
+        closeModal();
+        // Refresh product list in dropdown
+        const sel = document.getElementById('adj-product');
+        const prodId = parseInt(sel.value);
+        const opt = sel.querySelector(`option[value="${prodId}"]`);
+        if (opt) opt.dataset.stock = result.change !== undefined
+            ? parseInt(opt.dataset.stock) + result.change
+            : document.getElementById('adj-qty').value;
+        document.getElementById('adj-form').reset();
+        document.getElementById('current-stock-info').style.display = 'none';
+        document.getElementById('change-preview').style.display = 'none';
+        loadLog();
+    } catch (err) {
+        window.showToastNotification(err.message, 'error');
+    } finally { btn.disabled = false; }
+}
+</script>
+{% endblock %}

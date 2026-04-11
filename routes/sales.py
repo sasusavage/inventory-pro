@@ -196,6 +196,14 @@ def create_sale():
         from routes.dashboard import invalidate_stats_cache
         invalidate_stats_cache()
 
+        # Award loyalty points
+        try:
+            from routes.loyalty import award_points_for_sale
+            award_points_for_sale(new_sale)
+            db.session.commit()
+        except Exception:
+            pass  # loyalty failure must never break a sale
+
         # Optional per-sale Telegram alert (only if owner has enabled it)
         from models import AppSetting
         if AppSetting.get('notify_on_sale', '0') == '1':
@@ -206,7 +214,19 @@ def create_sale():
                 new_sale.payment_status,
             )
 
-        return jsonify({'message': 'Sale completed', 'sale_id': new_sale.id}), 201
+        # Return loyalty balance so POS can show it
+        try:
+            from models import LoyaltyPoint
+            loyalty_balance = LoyaltyPoint.balance(new_sale.customer_id)
+        except Exception:
+            loyalty_balance = None
+
+        return jsonify({
+            'message': 'Sale completed',
+            'id': new_sale.id,
+            'sale_id': new_sale.id,
+            'loyalty_points': loyalty_balance,
+        }), 201
 
     except ValueError as e:
         db.session.rollback()
@@ -314,3 +334,17 @@ def generate_invoice(sale_id):
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename=receipt_{sale.id}.pdf'
     return response
+
+
+@sales_bp.route('/sales/<int:sale_id>/receipt', methods=['GET'])
+@login_required
+def html_receipt(sale_id):
+    """Browser-printable HTML receipt — no external dependencies needed."""
+    from models import AppSetting
+    sale = Sale.query.options(
+        joinedload(Sale.customer),
+        joinedload(Sale.items).joinedload(SaleItem.product),
+    ).get_or_404(sale_id)
+    store_name = AppSetting.get('store_name', 'InventoryPro')
+    currency = AppSetting.get('currency', '$')
+    return render_template('receipt.html', sale=sale, store_name=store_name, currency=currency)

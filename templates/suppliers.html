@@ -5,14 +5,14 @@
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">Supplier Management</h2>
-    <div class="flex items-center gap-2">
-        <input type="text" id="supp-search" class="form-control" placeholder="Search suppliers..." style="width: 250px;">
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <input type="text" id="supp-search" class="form-control" placeholder="🔍 Search suppliers..." style="width:220px;">
         <button class="btn btn-primary" onclick="openSuppModal()">+ Add Supplier</button>
     </div>
 </header>
 
-<div class="table-container">
-    <table class="table">
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:500px;">
         <thead>
             <tr>
                 <th>Supplier Name</th>

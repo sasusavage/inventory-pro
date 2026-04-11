@@ -113,6 +113,22 @@ def receive_po(po_id):
         db.session.commit()
         from routes.dashboard import invalidate_stats_cache
         invalidate_stats_cache()
+
+        # Telegram notification
+        try:
+            from notifications import notify_async
+            items_summary = ', '.join(
+                f"{item.product.name} +{item.quantity}" for item in po.items
+            )
+            notify_async(
+                f"📦 <b>Purchase Order Received</b>\n\n"
+                f"🏷️ <b>PO #{po.id}</b> from {po.supplier.name}\n"
+                f"📋 <b>Items restocked:</b> {items_summary}\n"
+                f"💰 <b>Total:</b> ${po.total_amount:.2f}"
+            )
+        except Exception:
+            pass
+
         return jsonify({'message': 'PO Received and stock updated'})
     except Exception:
         db.session.rollback()

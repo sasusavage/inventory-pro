@@ -5,220 +5,258 @@
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">Product Inventory</h2>
-    <div class="flex items-center gap-2" style="flex-wrap: wrap; justify-content: flex-end; width: 100%;">
-        <input type="text" id="search-box"
-            style="width: 200px; padding: 0.5rem; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-surface); color: white;"
-            placeholder="Search products...">
-        <div
-            style="display: flex; gap: 0.5rem; padding: 0.2rem; background: var(--bg-surface); border-radius: var(--radius-sm); align-items: center; border: 1px solid var(--border-subtle);">
-            <input type="number" id="bulk-price" placeholder="New Price" step="0.01"
-                style="width: 100px; padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-base); color: white;">
-            <button id="bulk-price-btn" class="btn btn-secondary"
-                style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Set Price</button>
-            <button id="bulk-delete-btn" class="btn btn-danger"
-                style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">Delete</button>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <input type="text" id="search-box" class="form-control" style="width:200px;" placeholder="🔍 Search products...">
+        <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+            <input type="number" id="bulk-price" class="form-control" placeholder="New price" step="0.01" style="width:110px;">
+            <button id="bulk-price-btn" class="btn btn-secondary btn-sm">Set Price</button>
+            <button id="bulk-delete-btn" class="btn btn-danger btn-sm">Delete</button>
         </div>
         <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
     </div>
 </header>
 
-<div class="table-container">
-    <table>
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:580px;">
         <thead>
             <tr>
-                <th style="width: 40px;"><input type="checkbox" id="select-all" onclick="toggleAllCheckboxes(this)"></th>
+                <th style="width:36px;"><input type="checkbox" id="select-all" onclick="toggleAllCheckboxes(this)"></th>
                 <th>Image</th>
                 <th>Name</th>
                 <th>SKU</th>
                 <th>Price</th>
                 <th>Stock</th>
                 <th>Status</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="product-list">
-            <tr>
-                <td colspan="7" class="text-center">Loading...</td>
-            </tr>
+            <tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
         </tbody>
     </table>
 </div>
+<div id="product-pagination" class="pagination"></div>
 
-<!-- Product Modal -->
+<!-- Add/Edit Product Modal -->
 <div id="product-modal" class="modal">
     <div class="modal-content">
-        <span class="close-modal" onclick="closeProductModal()">&times;</span>
-        <h2>Add Product</h2>
+        <div class="modal-header">
+            <h2 id="modal-title" style="margin:0; font-size:1.2rem; font-weight:700;">Add Product</h2>
+            <button class="close-modal" onclick="closeProductModal()">&times;</button>
+        </div>
         <form id="product-form">
+            <input type="hidden" id="p-id">
             <div class="grid-2-col">
-                <div class="form-group"><label>Name</label><input type="text" id="p-name" class="form-control" required>
-                </div>
-                <div class="form-group"><label>SKU</label><input type="text" id="p-sku" class="form-control" required>
-                </div>
+                <div class="form-group"><label>Name *</label><input type="text" id="p-name" class="form-control" required></div>
+                <div class="form-group"><label>SKU *</label><input type="text" id="p-sku" class="form-control" required></div>
             </div>
             <div class="grid-2-col">
-                <div class="form-group"><label>Cost Price</label><input type="number" id="p-cost" class="form-control"
-                        step="0.01" required></div>
-                <div class="form-group"><label>Selling Price</label><input type="number" id="p-price"
-                        class="form-control" step="0.01" required></div>
+                <div class="form-group"><label>Cost Price *</label><input type="number" id="p-cost" class="form-control" step="0.01" min="0" required></div>
+                <div class="form-group"><label>Selling Price *</label><input type="number" id="p-price" class="form-control" step="0.01" min="0" required></div>
             </div>
             <div class="grid-2-col">
-                <div class="form-group"><label>Initial Stock</label><input type="number" id="p-stock"
-                        class="form-control" required></div>
-                <div class="form-group"><label>Min Stock (Alert)</label><input type="number" id="p-min"
-                        class="form-control" value="10"></div>
+                <div class="form-group"><label>Stock Qty *</label><input type="number" id="p-stock" class="form-control" min="0" required></div>
+                <div class="form-group"><label>Min Stock Alert</label><input type="number" id="p-min" class="form-control" value="10" min="0"></div>
             </div>
             <div class="form-group">
-                <label>Image (Upload)</label>
-                <input type="file" id="p-file" class="form-control">
+                <label>Upload Image</label>
+                <input type="file" id="p-file" class="form-control" accept="image/*">
             </div>
             <div class="form-group">
                 <label>Or Image URL</label>
                 <input type="url" id="p-url" class="form-control" placeholder="https://...">
             </div>
-
-            <button type="submit" class="btn btn-primary btn-block">Save Product</button>
+            <button type="submit" class="btn btn-primary btn-block" id="save-product-btn">Save Product</button>
         </form>
     </div>
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        loadProducts();
+let currentPage = 1;
+const PER_PAGE = 50;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+
+    let searchTimer;
+    document.getElementById('search-box').addEventListener('input', (e) => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { currentPage = 1; loadProducts(e.target.value.trim()); }, 300);
     });
-
-    async function loadProducts(search = '') {
-        const params = new URLSearchParams({ per_page: 500 });
-        if (search) params.set('search', search);
-        const res = await fetch(`/products?${params}`);
-        const json = await res.json();
-        const data = json.data || json; // backwards-compat
-        const list = document.getElementById('product-list');
-
-        if (data.length === 0) {
-            list.innerHTML = '<tr><td colspan="7" class="text-center">No products found</td></tr>';
-            return;
-        }
-
-        list.innerHTML = data.map(p => {
-            let img = p.image_filename ? `/static/uploads/${p.image_filename}` :
-                (p.image_url || 'https://placehold.co/50?text=No+Img');
-
-            const status = p.quantity_in_stock <= p.min_stock_level ?
-                '<span class="badge badge-danger">Low Stock</span>' :
-                '<span class="badge badge-success">In Stock</span>';
-
-            return `
-                <tr>
-                    <td><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
-                    <td><img src="${img}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"></td>
-                    <td>${p.name}</td>
-                    <td>${p.sku}</td>
-                    <td>$${p.selling_price.toFixed(2)}</td>
-                    <td>${p.quantity_in_stock}</td>
-                    <td>${status}</td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    // Reuse existing bulk logic... (I'll keep the script tags focused)
-</script>
-
-<script>
-    // Bulk and Helper Script for Products
-    function showToast(message, type = 'success') {
-        // Implementation... (Ideally we'd have a global toast function in layout.html script)
-        alert(message);
-    }
-
-    function toggleAllCheckboxes(source) {
-        let checkboxes = document.querySelectorAll('.product-checkbox');
-        for (var i = 0, n = checkboxes.length; i < n; i++) {
-            checkboxes[i].checked = source.checked;
-        }
-    }
-
-    function getSelectedProducts() {
-        return Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => parseInt(cb.value));
-    }
 
     document.getElementById('bulk-delete-btn').addEventListener('click', async () => {
         const ids = getSelectedProducts();
-        if (ids.length === 0) return alert('No products selected');
-        if (!confirm('Are you sure you want to delete selected products?')) return;
-
-        await fetch('/products/bulk', {
+        if (!ids.length) return showToast('No products selected', 'warning');
+        if (!confirm(`Delete ${ids.length} product(s)?`)) return;
+        const res = await fetch('/products/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'delete', product_ids: ids })
         });
-        document.getElementById('select-all').checked = false;
-        loadProducts();
+        if (res.ok) { showToast('Deleted successfully'); loadProducts(); }
     });
 
     document.getElementById('bulk-price-btn').addEventListener('click', async () => {
         const ids = getSelectedProducts();
         const newPrice = document.getElementById('bulk-price').value;
-        if (ids.length === 0) return alert('No products selected');
-        if (!newPrice) return alert('Please enter a new price');
-
+        if (!ids.length) return showToast('No products selected', 'warning');
+        if (!newPrice) return showToast('Enter a new price', 'warning');
         await fetch('/products/bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'update_price', product_ids: ids, new_selling_price: parseFloat(newPrice) })
         });
-        document.getElementById('select-all').checked = false;
+        showToast('Prices updated');
         document.getElementById('bulk-price').value = '';
         loadProducts();
     });
 
-    function openProductModal() {
-        document.getElementById('product-modal').style.display = 'block';
+    document.getElementById('product-form').addEventListener('submit', saveProduct);
+});
+
+async function loadProducts(search = '', page = currentPage) {
+    const params = new URLSearchParams({ page, per_page: PER_PAGE });
+    if (search) params.set('search', search);
+    const res = await fetch(`/products?${params}`);
+    const json = await res.json();
+    const data = Array.isArray(json) ? json : (json.data || []);
+    const pagination = json.pagination || null;
+    renderProducts(data);
+    if (pagination) renderPagination(pagination, search);
+}
+
+function renderProducts(data) {
+    const list = document.getElementById('product-list');
+    if (!data.length) {
+        list.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">No products found</td></tr>';
+        return;
     }
-    function closeProductModal() {
-        document.getElementById('product-modal').style.display = 'none';
+    list.innerHTML = data.map(p => {
+        const img = p.image_filename ? `/static/uploads/${p.image_filename}` : (p.image_url || '');
+        const imgTag = img
+            ? `<img src="${img}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`
+            : `<div style="width:44px;height:44px;background:var(--bg-elevated);border-radius:6px;display:flex;align-items:center;justify-content:center;">📦</div>`;
+        const oos = p.quantity_in_stock <= 0;
+        const low = !oos && p.quantity_in_stock <= p.min_stock_level;
+        const badge = oos ? '<span class="badge badge-danger">Out of Stock</span>'
+                     : low ? '<span class="badge badge-warning">Low Stock</span>'
+                     : '<span class="badge badge-success">In Stock</span>';
+        return `
+            <tr>
+                <td><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
+                <td>${imgTag}</td>
+                <td style="font-weight:600;">${p.name}</td>
+                <td style="color:var(--text-muted); font-family:monospace;">${p.sku}</td>
+                <td>$${parseFloat(p.selling_price).toFixed(2)}</td>
+                <td>${p.quantity_in_stock}</td>
+                <td>${badge}</td>
+                <td>
+                    <button class="btn btn-secondary btn-sm" onclick='openEditModal(${JSON.stringify(p)})'>Edit</button>
+                </td>
+            </tr>`;
+    }).join('');
+}
+
+function renderPagination(pg, search = '') {
+    const el = document.getElementById('product-pagination');
+    if (pg.pages <= 1) { el.innerHTML = ''; return; }
+    let html = `<button ${pg.page <= 1 ? 'disabled' : ''} onclick="loadProducts('${search}', ${pg.page - 1})">← Prev</button>`;
+    for (let i = 1; i <= pg.pages; i++) {
+        if (pg.pages > 7 && Math.abs(i - pg.page) > 2 && i !== 1 && i !== pg.pages) { if (i === pg.page - 3 || i === pg.page + 3) html += '<span style="padding:0 4px;">…</span>'; continue; }
+        html += `<button class="${i === pg.page ? 'active' : ''}" onclick="loadProducts('${search}', ${i})">${i}</button>`;
     }
+    html += `<button ${pg.page >= pg.pages ? 'disabled' : ''} onclick="loadProducts('${search}', ${pg.page + 1})">Next →</button>`;
+    el.innerHTML = html;
+}
 
-    document.getElementById('product-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const pData = {
-            name: document.getElementById('p-name').value,
-            sku: document.getElementById('p-sku').value,
-            cost_price: parseFloat(document.getElementById('p-cost').value),
-            selling_price: parseFloat(document.getElementById('p-price').value),
-            quantity_in_stock: parseInt(document.getElementById('p-stock').value),
-            min_stock_level: parseInt(document.getElementById('p-min').value),
-            image_url: document.getElementById('p-url').value || null
-        };
+function toggleAllCheckboxes(source) {
+    document.querySelectorAll('.product-checkbox').forEach(cb => cb.checked = source.checked);
+}
 
-        try {
-            const res = await fetch('/products', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(pData)
-            });
-            const result = await res.json();
-            if (!res.ok) throw new Error(result.error);
+function getSelectedProducts() {
+    return Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => parseInt(cb.value));
+}
 
-            const fileInput = document.getElementById('p-file');
-            if (fileInput.files.length > 0) {
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                formData.append('product_id', result.id);
-                await fetch('/products/upload-image', { method: 'POST', body: formData });
-            }
+function openProductModal() {
+    document.getElementById('modal-title').textContent = 'Add Product';
+    document.getElementById('p-id').value = '';
+    document.getElementById('product-form').reset();
+    document.getElementById('product-modal').classList.add('active');
+}
 
-            closeProductModal();
-            loadProducts();
-            document.getElementById('product-form').reset();
-        } catch (err) { alert(err.message); }
-    });
-    
-    // Server-side search
-    let searchTimer;
-    document.getElementById('search-box').addEventListener('input', (e) => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => loadProducts(e.target.value.trim()), 300);
-    });
+function openEditModal(p) {
+    document.getElementById('modal-title').textContent = 'Edit Product';
+    document.getElementById('p-id').value = p.id;
+    document.getElementById('p-name').value = p.name;
+    document.getElementById('p-sku').value = p.sku;
+    document.getElementById('p-cost').value = p.cost_price;
+    document.getElementById('p-price').value = p.selling_price;
+    document.getElementById('p-stock').value = p.quantity_in_stock;
+    document.getElementById('p-min').value = p.min_stock_level;
+    document.getElementById('p-url').value = p.image_url || '';
+    document.getElementById('product-modal').classList.add('active');
+}
+
+function closeProductModal() {
+    document.getElementById('product-modal').classList.remove('active');
+}
+
+async function saveProduct(e) {
+    e.preventDefault();
+    const id = document.getElementById('p-id').value;
+    const pData = {
+        name: document.getElementById('p-name').value,
+        sku: document.getElementById('p-sku').value,
+        cost_price: parseFloat(document.getElementById('p-cost').value),
+        selling_price: parseFloat(document.getElementById('p-price').value),
+        quantity_in_stock: parseInt(document.getElementById('p-stock').value),
+        min_stock_level: parseInt(document.getElementById('p-min').value),
+        image_url: document.getElementById('p-url').value || null
+    };
+
+    const btn = document.getElementById('save-product-btn');
+    btn.disabled = true; btn.textContent = 'Saving...';
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/products/${id}` : '/products';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pData)
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Save failed');
+
+        const productId = id || result.id;
+        const fileInput = document.getElementById('p-file');
+        if (fileInput.files.length > 0) {
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('product_id', productId);
+            await fetch('/products/upload-image', { method: 'POST', body: formData });
+        }
+
+        showToast(id ? 'Product updated!' : 'Product added!');
+        closeProductModal();
+        loadProducts();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        btn.disabled = false; btn.textContent = 'Save Product';
+    }
+}
+
+function showToast(msg, type = 'success') {
+    if (window.showToastNotification) return window.showToastNotification(msg, type);
+    const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+    const tc = document.getElementById('toast-container') || (() => { const d = document.createElement('div'); d.id = 'toast-container'; document.body.appendChild(d); return d; })();
+    const t = document.createElement('div');
+    t.className = `toast ${type}`;
+    t.innerHTML = `<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+    tc.appendChild(t);
+    setTimeout(() => t.classList.add('show'), 10);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
+}
 </script>
 {% endblock %}

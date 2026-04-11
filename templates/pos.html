@@ -1,63 +1,176 @@
 {% extends "layout.html" %}
-
 {% block title %}POS Terminal - InventoryPro{% endblock %}
-
 {% block content %}
-<header class="page-header" style="margin-bottom: 1.5rem;">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+    .pos-wrapper {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 1.5rem;
+        height: calc(100vh - 130px);
+    }
+    .pos-products-panel {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+        overflow: hidden;
+    }
+    .pos-cart-panel {
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+        overflow: hidden;
+    }
+    .pos-product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+        overflow-y: auto;
+        flex: 1;
+        padding: 0.25rem;
+    }
+    .pos-product-card {
+        background: var(--bg-elevated);
+        border: 1.5px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 0.75rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .pos-product-card:hover {
+        border-color: var(--accent-primary);
+        box-shadow: 0 0 0 3px rgba(79,70,229,0.08);
+        transform: translateY(-1px);
+    }
+    .pos-product-card.out-of-stock {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .pos-product-card img {
+        width: 100%;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+    }
+    .pos-product-name { font-size: 0.82rem; font-weight: 600; margin-bottom: 0.15rem; color: var(--text-main); }
+    .pos-product-price { font-size: 0.85rem; color: var(--accent-primary); font-weight: 700; }
+    .pos-product-stock { font-size: 0.7rem; margin-top: 0.15rem; }
+
+    .pos-cart-items { flex: 1; overflow-y: auto; }
+    .pos-cart-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+    .pos-cart-item-name { flex: 1; font-size: 0.88rem; font-weight: 600; }
+    .pos-cart-item-price { font-size: 0.8rem; color: var(--text-muted); }
+    .pos-summary {
+        border-top: 2px solid var(--border-subtle);
+        padding-top: 1rem;
+        margin-top: 0.5rem;
+    }
+    .pos-total-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 1.2rem;
+        font-weight: 800;
+        color: var(--text-main);
+        margin-bottom: 0.75rem;
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+        .pos-wrapper {
+            grid-template-columns: 1fr;
+            height: auto;
+        }
+        .pos-products-panel, .pos-cart-panel {
+            height: 50vh;
+        }
+        .pos-product-grid {
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        }
+        .pos-product-card img { height: 60px; }
+    }
+</style>
+
+<header class="page-header" style="margin-bottom: 1.25rem;">
     <h2 class="page-title">Point of Sale</h2>
-    <div class="user-profile">
-        <span class="user-name">Welcome, <span id="user-role-display-pos">User</span></span>
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+        <span id="cart-badge" style="background:var(--accent-primary);color:#fff;border-radius:999px;padding:2px 10px;font-size:0.8rem;display:none;">0 items</span>
     </div>
 </header>
 
-<div class="grid-2-col" style="grid-template-columns: 3fr 2fr; gap: 1.5rem;">
-    <!-- POS Area (Products) -->
-    <div class="card" style="display: flex; flex-direction: column; height: 80vh;">
-        <div class="form-group" style="margin-bottom: 1rem;">
-            <input type="text" id="pos-search" class="form-control" placeholder="Search by name or SKU..." autocomplete="off">
+<div class="pos-wrapper">
+    <!-- Products Panel -->
+    <div class="pos-products-panel">
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem; flex-shrink:0;">
+            <input type="text" id="pos-search" class="form-control" placeholder="🔍 Search by name or SKU..." autocomplete="off" style="flex:1;">
+            <button class="btn btn-secondary" onclick="openScanner()" title="Scan barcode/QR" style="flex-shrink:0; padding:0.6rem 0.85rem;">📷</button>
         </div>
-        
-        <div id="pos-products" class="grid-3-col" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; overflow-y: auto; padding-right: 0.5rem;">
-            <!-- Products Loaded dynamically -->
-            <div class="text-center" style="grid-column: 1/-1; padding: 2rem;">Loading products...</div>
+        <div id="category-tabs" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.75rem; flex-shrink:0;"></div>
+
+        <!-- Barcode Scanner Modal -->
+        <div id="scanner-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.7); z-index:2000; align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:14px; padding:1.5rem; width:min(420px, 95vw); box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+                    <h3 style="margin:0; font-size:1rem; font-weight:700;">📷 Scan Barcode / QR</h3>
+                    <button onclick="closeScanner()" style="background:#fee2e2; border:none; color:#dc2626; border-radius:6px; padding:4px 10px; cursor:pointer; font-weight:700;">✕</button>
+                </div>
+                <div id="qr-reader" style="width:100%;"></div>
+                <p style="font-size:0.78rem; color:#64748b; margin-top:0.75rem; text-align:center;">Point your camera at a barcode or QR code. Works with USB scanners too — just scan into the search box.</p>
+            </div>
+        </div>
+        <div id="pos-products" class="pos-product-grid">
+            <div style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--text-muted);">
+                <div style="font-size:1.5rem; margin-bottom:0.5rem;">⏳</div>
+                Loading products...
+            </div>
         </div>
     </div>
 
-    <!-- Order Summary area (Invoice) -->
-    <div class="card" style="display: flex; flex-direction: column; height: 80vh;">
-        <div class="card-header" style="flex-shrink: 0; margin-bottom: 1rem;">
-            <h3>🛒 Your Basket</h3>
+    <!-- Cart Panel -->
+    <div class="pos-cart-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-shrink:0;">
+            <h3 style="margin:0;">🛒 Basket</h3>
             <button class="btn btn-secondary btn-sm" onclick="clearCart()">Clear</button>
         </div>
-        
-        <!-- Customer Selection -->
-        <div class="form-group" style="flex-shrink: 0; margin-bottom: 1rem;">
-            <label>👤 Select Customer</label>
-            <div class="flex gap-2">
-                <select id="pos-customer" class="form-control" style="flex: 1;">
-                    <option value="">-- Select Customer --</option>
-                </select>
-            </div>
+
+        <div class="form-group" style="flex-shrink:0; margin-bottom:0.75rem;">
+            <label style="font-size:0.8rem; font-weight:600;">Customer</label>
+            <select id="pos-customer" class="form-control">
+                <option value="">-- Select Customer --</option>
+            </select>
         </div>
 
-        <div id="pos-cart" style="flex: 1; overflow-y: auto; margin-bottom: 2rem; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); padding: 1rem 0;">
-            <div class="text-center" style="padding: 2rem; color: var(--text-muted);">
-                Cart is currently empty.
-            </div>
+        <div id="pos-cart" class="pos-cart-items">
+            <div class="text-center" style="padding:2rem; color:var(--text-muted);">Cart is empty</div>
         </div>
 
-        <div class="order-summary" style="flex-shrink: 0;">
-            <div class="flex justify-between" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; color: #ffffff;">
-                <span>GRAND TOTAL</span>
+        <div class="pos-summary">
+            <div class="pos-total-row">
+                <span>Total</span>
                 <span id="pos-total">$0.00</span>
             </div>
-            
-            <div class="form-group" style="margin-bottom: 1rem;">
-                <label>💵 Amount Paid</label>
-                <input type="number" id="pos-paid" class="form-control" value="0" step="0.01">
+            <div class="form-group" style="margin-bottom:0.75rem;">
+                <label style="font-size:0.8rem; font-weight:600;">Amount Paid</label>
+                <input type="number" id="pos-paid" class="form-control" value="0" step="0.01" min="0">
             </div>
-
-            <button class="btn btn-primary btn-block" style="padding: 1rem; font-size: 1.1rem; border-radius: var(--radius-md);" onclick="checkout()" id="checkout-btn">
+            <div id="pos-change" style="display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:0.6rem 0.75rem; margin-bottom:0.75rem; font-weight:700; color:#16a34a; font-size:0.95rem;"></div>
+            <button class="btn btn-primary" style="width:100%; padding:0.85rem; font-size:1rem;" onclick="checkout()" id="checkout-btn">
                 ✅ Complete Order
             </button>
         </div>
@@ -67,59 +180,97 @@
 <script>
     let products = [];
     let cart = [];
-    let customers = [];
+    let activeCategoryId = null;
 
     document.addEventListener('DOMContentLoaded', async () => {
-        if (typeof checkAuthAndPerms === 'function') {
-            await checkAuthAndPerms();
-        }
-        loadPOSProducts();
-        loadPOSCustomers();
+        await loadPOSProducts();
+        await loadPOSCustomers();
+        loadCategories();
 
         document.getElementById('pos-search').addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            renderPOSProducts(products.filter(p => 
-                p.name.toLowerCase().includes(term) || 
-                p.sku.toLowerCase().includes(term)
-            ));
+            const term = e.target.value.toLowerCase().trim();
+            const filtered = term
+                ? products.filter(p => p.name.toLowerCase().includes(term) || (p.sku||'').toLowerCase().includes(term))
+                : products;
+            renderPOSProducts(filtered);
         });
+
+        document.getElementById('pos-paid').addEventListener('input', updateChange);
     });
 
+    async function loadCategories() {
+        try {
+            const res = await fetch('/api/categories');
+            const cats = await res.json();
+            if (!cats.length) return;
+            const tabs = document.getElementById('category-tabs');
+            tabs.innerHTML = `<button class="cat-tab active" style="padding:4px 12px; border-radius:99px; border:1px solid var(--border-subtle); background:var(--accent-primary); color:#fff; font-size:0.78rem; font-weight:600; cursor:pointer;" onclick="filterByCategory(null, this)">All</button>`
+                + cats.map(c => `<button class="cat-tab" style="padding:4px 12px; border-radius:99px; border:1px solid var(--border-subtle); background:var(--bg-elevated); color:var(--text-main); font-size:0.78rem; font-weight:600; cursor:pointer;" onclick="filterByCategory(${c.id}, this)">${c.name}</button>`).join('');
+        } catch (_) {}
+    }
+
+    function filterByCategory(catId, btn) {
+        activeCategoryId = catId;
+        document.querySelectorAll('.cat-tab').forEach(b => {
+            b.style.background = 'var(--bg-elevated)';
+            b.style.color = 'var(--text-main)';
+        });
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.color = '#fff';
+        loadPOSProducts();
+    }
+
     async function loadPOSProducts() {
-        const res = await fetch('/products');
-        products = await res.json();
-        renderPOSProducts(products);
+        try {
+            const params = new URLSearchParams({ per_page: 500 });
+        if (activeCategoryId) params.set('category_id', activeCategoryId);
+        const res = await fetch(`/products?${params}`);
+            if (!res.ok) throw new Error('Failed to load products');
+            const json = await res.json();
+            // API returns { data: [...], pagination: {...} }
+            products = Array.isArray(json) ? json : (json.data || []);
+            renderPOSProducts(products);
+        } catch (err) {
+            document.getElementById('pos-products').innerHTML =
+                `<div style="grid-column:1/-1; text-align:center; padding:2rem; color:#ef4444;">⚠️ Failed to load products.<br><small>${err.message}</small><br><button class="btn btn-secondary btn-sm" style="margin-top:0.5rem;" onclick="loadPOSProducts()">Retry</button></div>`;
+        }
     }
 
     async function loadPOSCustomers() {
-        const res = await fetch('/customers');
-        customers = await res.json();
-        const select = document.getElementById('pos-customer');
-        customers.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.id;
-            opt.textContent = `${c.full_name} (${c.phone})`;
-            select.appendChild(opt);
-        });
+        try {
+            const res = await fetch('/customers?per_page=500');
+            if (!res.ok) throw new Error('Failed');
+            const json = await res.json();
+            // API returns { data: [...], pagination: {...} }
+            const customers = Array.isArray(json) ? json : (json.data || []);
+            const select = document.getElementById('pos-customer');
+            customers.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `${c.full_name}${c.phone ? ' (' + c.phone + ')' : ''}`;
+                select.appendChild(opt);
+            });
+        } catch (_) {}
     }
 
     function renderPOSProducts(pList) {
         const grid = document.getElementById('pos-products');
-        if (pList.length === 0) {
-            grid.innerHTML = '<div class="text-center" style="grid-column: 1/-1; padding: 2rem;">No matching items found. 🔍</div>';
+        if (!pList || pList.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:2rem; color:var(--text-muted);">No products found 🔍</div>';
             return;
         }
-
         grid.innerHTML = pList.map(p => {
-            let img = p.image_filename ? `/static/uploads/${p.image_filename}` :
-                    (p.image_url || 'https://placehold.co/50?text=No+Img');
-            
+            const img = p.image_filename ? `/static/uploads/${p.image_filename}` : (p.image_url || '');
+            const oos = p.quantity_in_stock <= 0;
+            const low = !oos && p.quantity_in_stock <= p.min_stock_level;
+            const stockColor = oos ? '#ef4444' : (low ? '#f97316' : '#22c55e');
+            const stockLabel = oos ? 'Out of stock' : `${p.quantity_in_stock} in stock`;
             return `
-                <div class="stat-card" onclick="addToCart(${p.id})" style="flex-direction: column; align-items: center; text-align: center; cursor: pointer; padding: 1rem;">
-                    <img src="${img}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 8px; margin-bottom: 0.5rem;">
-                    <h4 style="font-size: 0.9rem; margin-bottom: 0.25rem;">${p.name}</h4>
-                    <p style="font-size: 0.8rem; color: var(--text-muted);">$${p.selling_price.toFixed(2)}</p>
-                    <p style="font-size: 0.7rem; color: ${p.quantity_in_stock <= p.min_stock_level ? '#fb7185' : '#34d399'}">${p.quantity_in_stock} in stock</p>
+                <div class="pos-product-card ${oos ? 'out-of-stock' : ''}" onclick="${oos ? 'void(0)' : 'addToCart(' + p.id + ')'}">
+                    ${img ? `<img src="${img}" alt="${p.name}" onerror="this.style.display='none'">` : `<div style="width:100%;height:80px;background:var(--bg-base);border-radius:6px;margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">📦</div>`}
+                    <div class="pos-product-name">${p.name}</div>
+                    <div class="pos-product-price">$${parseFloat(p.selling_price).toFixed(2)}</div>
+                    <div class="pos-product-stock" style="color:${stockColor};">${stockLabel}</div>
                 </div>
             `;
         }).join('');
@@ -127,12 +278,13 @@
 
     function addToCart(pId) {
         const p = products.find(x => x.id === pId);
-        if (!p) return;
-        if (p.quantity_in_stock <= 0) return alert('This product is currently out of stock!');
-
+        if (!p || p.quantity_in_stock <= 0) return;
         const existing = cart.find(x => x.id === pId);
         if (existing) {
-            if (existing.quantity >= p.quantity_in_stock) return alert('No more stock available!');
+            if (existing.quantity >= p.quantity_in_stock) {
+                showToast('No more stock available!', 'warning');
+                return;
+            }
             existing.quantity++;
         } else {
             cart.push({ ...p, quantity: 1 });
@@ -140,36 +292,51 @@
         renderCart();
     }
 
-    function updateCartQty(pId, qty) {
-        const item = cart.find(x => x.id === pId);
+    function updateCartQty(pId, val) {
+        const qty = parseInt(val);
         const p = products.find(x => x.id === pId);
-        if (qty > p.quantity_in_stock) return alert('No more stock available!');
-        if (qty <= 0) {
+        if (!p) return;
+        if (isNaN(qty) || qty <= 0) {
             cart = cart.filter(x => x.id !== pId);
+        } else if (qty > p.quantity_in_stock) {
+            showToast('Not enough stock!', 'warning');
+            return;
         } else {
-            item.quantity = parseInt(qty);
+            cart.find(x => x.id === pId).quantity = qty;
         }
         renderCart();
     }
 
     function renderCart() {
         const container = document.getElementById('pos-cart');
+        const badge = document.getElementById('cart-badge');
+        const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
+
         if (cart.length === 0) {
-            container.innerHTML = '<div class="text-center" style="padding: 2rem; color: var(--text-muted);">Cart is currently empty.</div>';
+            container.innerHTML = '<div class="text-center" style="padding:2rem; color:var(--text-muted);">Cart is empty</div>';
             document.getElementById('pos-total').textContent = '$0.00';
+            document.getElementById('pos-paid').value = '0.00';
+            document.getElementById('pos-change').style.display = 'none';
+            badge.style.display = 'none';
             return;
         }
 
+        badge.textContent = `${totalItems} item${totalItems !== 1 ? 's' : ''}`;
+        badge.style.display = 'inline';
+
         container.innerHTML = cart.map(item => `
-            <div class="list-item" style="padding: 0.75rem;">
-                <div style="flex: 1;">
-                    <div style="font-weight: 600;">${item.name}</div>
-                    <div style="font-size: 0.8rem; color: var(--text-muted);">$${item.selling_price.toFixed(2)} / unit</div>
+            <div class="pos-cart-item">
+                <div style="flex:1; min-width:0;">
+                    <div class="pos-cart-item-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}</div>
+                    <div class="pos-cart-item-price">$${parseFloat(item.selling_price).toFixed(2)} × ${item.quantity} = <strong>$${(item.selling_price * item.quantity).toFixed(2)}</strong></div>
                 </div>
-                <div class="flex items-center gap-2" style="width: 150px; justify-content: flex-end;">
-                    <input type="number" value="${item.quantity}" class="form-control" style="width: 60px; padding: 0.25rem 0.5rem;" 
+                <div style="display:flex; align-items:center; gap:0.4rem; flex-shrink:0;">
+                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${item.id}, ${item.quantity - 1})">−</button>
+                    <input type="number" value="${item.quantity}" min="1" max="${products.find(p=>p.id===item.id)?.quantity_in_stock||99}"
+                        style="width:48px; text-align:center; padding:2px 4px; border:1px solid var(--border-subtle); border-radius:6px; font-size:0.85rem;"
                         onchange="updateCartQty(${item.id}, this.value)">
-                    <button class="btn btn-danger btn-sm" onclick="updateCartQty(${item.id}, 0)">×</button>
+                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${item.id}, ${item.quantity + 1})">+</button>
+                    <button class="btn btn-sm" style="padding:2px 8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5;" onclick="updateCartQty(${item.id}, 0)">×</button>
                 </div>
             </div>
         `).join('');
@@ -177,45 +344,103 @@
         const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
         document.getElementById('pos-total').textContent = `$${total.toFixed(2)}`;
         document.getElementById('pos-paid').value = total.toFixed(2);
+        updateChange();
+    }
+
+    function updateChange() {
+        const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
+        const paid = parseFloat(document.getElementById('pos-paid').value) || 0;
+        const changeEl = document.getElementById('pos-change');
+        if (paid > 0 && paid >= total && cart.length > 0) {
+            const change = paid - total;
+            changeEl.textContent = `💵 Change: $${change.toFixed(2)}`;
+            changeEl.style.display = 'block';
+        } else {
+            changeEl.style.display = 'none';
+        }
     }
 
     async function checkout() {
-        if (cart.length === 0) return alert('Add items to the cart first!');
+        if (cart.length === 0) return showToast('Add items to the cart first!', 'warning');
         const cId = document.getElementById('pos-customer').value;
-        if (!cId) return alert('Please select a customer.');
-
+        if (!cId) return showToast('Please select a customer.', 'warning');
         const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
-        const amountPaid = parseFloat(document.getElementById('pos-paid').value);
+        const amountPaid = parseFloat(document.getElementById('pos-paid').value) || 0;
 
-        const saleData = {
-            customer_id: parseInt(cId),
-            items: cart.map(item => ({ product_id: item.id, quantity: item.quantity, price: item.selling_price })),
-            amount_paid: amountPaid
-        };
+        const btn = document.getElementById('checkout-btn');
+        btn.disabled = true;
+        btn.textContent = 'Processing...';
 
         try {
-            document.getElementById('checkout-btn').disabled = true;
             const res = await fetch('/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(saleData)
+                body: JSON.stringify({
+                    customer_id: parseInt(cId),
+                    items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, price: i.selling_price })),
+                    amount_paid: amountPaid
+                })
             });
-
             const result = await res.json();
             if (!res.ok) throw new Error(result.error || 'Failed to process order');
-
-            alert('Order processed successfully! 🎉');
-            window.location.href = `/sales/${result.id}/invoice`;
+            const pts = result.loyalty_points !== null && result.loyalty_points !== undefined
+                ? ` Customer loyalty balance: ${result.loyalty_points} pts.` : '';
+            showToast(`Order processed! 🎉${pts}`, 'success');
+            setTimeout(() => { window.location.href = `/sales/${result.id}/receipt`; }, 1200);
         } catch (err) {
-            alert(err.message);
-            document.getElementById('checkout-btn').disabled = false;
+            showToast(err.message, 'error');
+            btn.disabled = false;
+            btn.textContent = '✅ Complete Order';
         }
     }
 
     function clearCart() {
-        if (confirm('Clear all items from basket?')) {
-            cart = [];
-            renderCart();
+        if (cart.length === 0) return;
+        if (confirm('Clear all items from basket?')) { cart = []; renderCart(); }
+    }
+
+    function showToast(msg, type = 'info') {
+        if (typeof window.showToastNotification === 'function') {
+            window.showToastNotification(msg, type);
+        } else {
+            alert(msg);
+        }
+    }
+
+    /* ── Barcode Scanner ──────────────────────────────────────────────────── */
+    let html5QrcodeScanner = null;
+
+    function openScanner() {
+        const modal = document.getElementById('scanner-modal');
+        modal.style.display = 'flex';
+
+        html5QrcodeScanner = new Html5Qrcode('qr-reader');
+        html5QrcodeScanner.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 250, height: 150 } },
+            (decodedText) => {
+                closeScanner();
+                const search = document.getElementById('pos-search');
+                search.value = decodedText;
+                search.dispatchEvent(new Event('input'));
+                // If exact SKU match, auto-add to cart
+                const exact = products.find(p => p.sku === decodedText);
+                if (exact) addToCart(exact.id);
+            },
+            () => {}
+        ).catch(() => {
+            // Camera not available — just close and let user type
+            closeScanner();
+            showToast('Camera not available. Use the search box or a USB scanner.', 'warning');
+        });
+    }
+
+    function closeScanner() {
+        document.getElementById('scanner-modal').style.display = 'none';
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.stop().catch(() => {}).finally(() => {
+                html5QrcodeScanner = null;
+            });
         }
     }
 </script>

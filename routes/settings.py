@@ -12,6 +12,11 @@ SETTING_KEYS = {
     'notify_on_sale': 'Notify on every sale (1 = yes, 0 = no)',
     'store_name': 'Store Name',
     'store_currency': 'Currency Symbol (e.g. $ or ₦)',
+    'scheduler_daily_report': 'Daily AI report via Telegram (true/false)',
+    'scheduler_report_hour': 'Report send hour (0-23, default 8)',
+    'scheduler_weekly_report': 'Weekly AI report via Telegram (true/false)',
+    'loyalty_earn_rate': 'Loyalty points earned per $1 spent (default 1)',
+    'loyalty_redeem_rate': 'Points needed to redeem $1 discount (default 100)',
 }
 
 

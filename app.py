@@ -35,15 +35,27 @@ def create_app(config=None):
     from routes.settings import settings_bp
     from routes.ai import ai_bp
     from routes.analytics import analytics_bp
+    from routes.categories import categories_bp
+    from routes.expenses import expenses_bp
+    from routes.stock_adjustments import stock_adj_bp
+    from routes.loyalty import loyalty_bp
     from telegram_bot import bot_bp
 
     for bp in (
         auth_bp, dashboard_bp, products_bp, sales_bp,
         customers_bp, suppliers_bp, purchase_orders_bp,
         refunds_bp, reports_bp, users_bp, settings_bp,
-        ai_bp, analytics_bp, bot_bp,
+        ai_bp, analytics_bp, categories_bp, expenses_bp,
+        stock_adj_bp, loyalty_bp, bot_bp,
     ):
         app.register_blueprint(bp)
+
+    # Start background scheduler (non-blocking)
+    try:
+        from scheduler import init_scheduler
+        init_scheduler(app)
+    except Exception as _sched_err:
+        app.logger.warning(f"Scheduler not started: {_sched_err}")
 
     # ── Error handlers ───────────────────────────────────────────────────────
     @app.errorhandler(404)

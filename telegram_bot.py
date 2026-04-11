@@ -27,6 +27,7 @@ COMMANDS = {
     "/stock":   "Stock status & low-stock alerts",
     "/sales":   "Sales performance summary",
     "/predict": "7-day revenue & stockout predictions",
+    "/reorder": "Automated reorder suggestions",
     "/context": "Raw business metrics snapshot",
     "/help":    "List all commands",
 }
@@ -83,6 +84,36 @@ def _send_typing(token: str, chat_id: str) -> None:
 
 # ── Command processor ─────────────────────────────────────────────────────────
 
+def _get_reorder_suggestions(_token: str, _chat_id: str) -> str:
+    """Build a reorder suggestions message and return it as a string."""
+    try:
+        from models import db, Product
+        from flask import current_app
+        products = Product.query.filter(
+            Product.quantity_in_stock <= Product.min_stock_level
+        ).order_by(Product.quantity_in_stock.asc()).all()
+
+        if not products:
+            return "✅ <b>No reorder needed</b> — all products are above minimum stock levels."
+
+        lines = ["🛒 <b>Reorder Suggestions</b>\n"]
+        for p in products[:20]:
+            urgency = "🔴" if p.quantity_in_stock <= 0 else "🟠"
+            suggested_qty = max(p.min_stock_level * 3 - p.quantity_in_stock, p.min_stock_level)
+            lines.append(
+                f"{urgency} <b>{p.name}</b> (SKU: {p.sku})\n"
+                f"   Current: {p.quantity_in_stock} | Min: {p.min_stock_level}\n"
+                f"   Suggested order: {suggested_qty} units @ ${p.cost_price:.2f} ea"
+            )
+
+        if len(products) > 20:
+            lines.append(f"\n…and {len(products) - 20} more items.")
+
+        return "\n\n".join(lines)
+    except Exception as e:
+        return f"⚠️ Could not generate reorder suggestions: {e}"
+
+
 def handle_message(token: str, chat_id: str, text: str) -> None:
     """
     Process one incoming message from the authorised admin.
@@ -132,6 +163,8 @@ def handle_message(token: str, chat_id: str, text: str) -> None:
 
     if cmd in dispatch:
         reply = dispatch[cmd]()
+    elif cmd == "/reorder":
+        reply = _get_reorder_suggestions(token, chat_id)
     else:
         # Free-form question
         reply = ask_ai(text, for_telegram=True)

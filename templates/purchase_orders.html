@@ -5,14 +5,14 @@
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">Stock Procurement & Purchase Orders</h2>
-    <div class="flex items-center gap-2">
-        <input type="text" id="po-search" class="form-control" placeholder="Search orders..." style="width: 250px;">
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <input type="text" id="po-search" class="form-control" placeholder="🔍 Search orders..." style="width:220px;">
         <button class="btn btn-primary" onclick="openPOModal()">+ New Purchase Order</button>
     </div>
 </header>
 
-<div class="table-container">
-    <table class="table">
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:700px;">
         <thead>
             <tr>
                 <th>Date</th>

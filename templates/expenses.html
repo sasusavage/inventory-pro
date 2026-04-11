@@ -1,0 +1,222 @@
+{% extends "layout.html" %}
+{% block title %}Expenses - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">Expense Tracker</h2>
+    <button class="btn btn-primary" onclick="openModal()">+ Log Expense</button>
+</header>
+
+<!-- Summary Cards -->
+<div id="summary-cards" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem;"></div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <select id="filter-category" class="form-control" style="max-width:180px;">
+        <option value="">All Categories</option>
+        {% for cat in expense_categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+    </select>
+    <input type="date" id="filter-from" class="form-control" style="max-width:160px;">
+    <input type="date" id="filter-to" class="form-control" style="max-width:160px;">
+    <button class="btn btn-secondary btn-sm" onclick="loadExpenses()">Filter</button>
+    <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+</div>
+
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:580px;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Amount</th>
+                <th>Note</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="expenses-tbody">
+            <tr><td colspan="6" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+<div id="expense-pagination" class="pagination"></div>
+
+<!-- Modal -->
+<div id="exp-modal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2 id="modal-title" style="margin:0; font-size:1.1rem; font-weight:700;">Log Expense</h2>
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="exp-form">
+            <input type="hidden" id="exp-id">
+            <div class="grid-2-col">
+                <div class="form-group">
+                    <label>Title *</label>
+                    <input type="text" id="exp-title" class="form-control" required placeholder="e.g. Monthly Rent">
+                </div>
+                <div class="form-group">
+                    <label>Amount *</label>
+                    <input type="number" id="exp-amount" class="form-control" step="0.01" min="0.01" required>
+                </div>
+            </div>
+            <div class="grid-2-col">
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="exp-category" class="form-control">
+                        {% for cat in expense_categories %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="exp-date" class="form-control">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Note</label>
+                <textarea id="exp-note" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="save-btn">Save Expense</button>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('exp-date').value = new Date().toISOString().slice(0, 10);
+    loadExpenses();
+    loadSummary();
+    document.getElementById('exp-form').addEventListener('submit', saveExpense);
+});
+
+async function loadExpenses(page = 1) {
+    currentPage = page;
+    const cat = document.getElementById('filter-category').value;
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    const params = new URLSearchParams({ page, per_page: 50 });
+    if (cat) params.set('category', cat);
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+
+    const res = await fetch(`/api/expenses?${params}`);
+    const json = await res.json();
+    const tbody = document.getElementById('expenses-tbody');
+
+    if (!json.data.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:2rem; color:var(--text-muted);">No expenses found.</td></tr>';
+        document.getElementById('expense-pagination').innerHTML = '';
+        return;
+    }
+
+    tbody.innerHTML = json.data.map(e => `
+        <tr>
+            <td>${e.expense_date}</td>
+            <td style="font-weight:600;">${e.title}</td>
+            <td><span class="badge badge-warning">${e.category || 'Other'}</span></td>
+            <td style="font-weight:700; color:#dc2626;">$${parseFloat(e.amount).toFixed(2)}</td>
+            <td style="color:var(--text-muted); font-size:0.82rem;">${e.note || '—'}</td>
+            <td>
+                <button class="btn btn-secondary btn-sm" onclick='editExpense(${JSON.stringify(e)})'>Edit</button>
+                <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;" onclick="deleteExpense(${e.id})">Del</button>
+            </td>
+        </tr>
+    `).join('');
+
+    renderPagination(json.pagination);
+}
+
+async function loadSummary() {
+    const res = await fetch('/api/expenses/summary');
+    const json = await res.json();
+    const cards = document.getElementById('summary-cards');
+    const totalCard = `
+        <div style="background:var(--accent-primary); color:#fff; border-radius:12px; padding:1.25rem; box-shadow:var(--shadow-soft);">
+            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.8px; opacity:0.8; margin-bottom:0.25rem;">Total Expenses</div>
+            <div style="font-size:1.6rem; font-weight:800;">$${parseFloat(json.total || 0).toFixed(2)}</div>
+        </div>`;
+    const catCards = (json.by_category || []).slice(0, 5).map(c => `
+        <div style="background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:12px; padding:1.25rem; box-shadow:var(--shadow-soft);">
+            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:0.25rem;">${c.category}</div>
+            <div style="font-size:1.3rem; font-weight:700; color:var(--text-main);">$${parseFloat(c.total).toFixed(2)}</div>
+        </div>`).join('');
+    cards.innerHTML = totalCard + catCards;
+}
+
+function renderPagination(pg) {
+    const el = document.getElementById('expense-pagination');
+    if (!pg || pg.pages <= 1) { el.innerHTML = ''; return; }
+    let html = `<button ${pg.page <= 1 ? 'disabled' : ''} onclick="loadExpenses(${pg.page - 1})">← Prev</button>`;
+    for (let i = 1; i <= pg.pages; i++) {
+        html += `<button class="${i === pg.page ? 'active' : ''}" onclick="loadExpenses(${i})">${i}</button>`;
+    }
+    html += `<button ${pg.page >= pg.pages ? 'disabled' : ''} onclick="loadExpenses(${pg.page + 1})">Next →</button>`;
+    el.innerHTML = html;
+}
+
+function clearFilters() {
+    document.getElementById('filter-category').value = '';
+    document.getElementById('filter-from').value = '';
+    document.getElementById('filter-to').value = '';
+    loadExpenses();
+}
+
+function openModal() {
+    document.getElementById('modal-title').textContent = 'Log Expense';
+    document.getElementById('exp-id').value = '';
+    document.getElementById('exp-form').reset();
+    document.getElementById('exp-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('exp-modal').classList.add('active');
+}
+
+function editExpense(e) {
+    document.getElementById('modal-title').textContent = 'Edit Expense';
+    document.getElementById('exp-id').value = e.id;
+    document.getElementById('exp-title').value = e.title;
+    document.getElementById('exp-amount').value = e.amount;
+    document.getElementById('exp-category').value = e.category || 'Other';
+    document.getElementById('exp-date').value = e.expense_date;
+    document.getElementById('exp-note').value = e.note || '';
+    document.getElementById('exp-modal').classList.add('active');
+}
+
+function closeModal() { document.getElementById('exp-modal').classList.remove('active'); }
+
+async function saveExpense(e) {
+    e.preventDefault();
+    const id = document.getElementById('exp-id').value;
+    const data = {
+        title: document.getElementById('exp-title').value.trim(),
+        amount: parseFloat(document.getElementById('exp-amount').value),
+        category: document.getElementById('exp-category').value,
+        expense_date: document.getElementById('exp-date').value,
+        note: document.getElementById('exp-note').value.trim(),
+    };
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    try {
+        const res = await fetch(id ? `/api/expenses/${id}` : '/api/expenses', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Failed');
+        window.showToastNotification(id ? 'Updated!' : 'Expense logged!');
+        closeModal();
+        loadExpenses();
+        loadSummary();
+    } catch (err) {
+        window.showToastNotification(err.message, 'error');
+    } finally { btn.disabled = false; }
+}
+
+async function deleteExpense(id) {
+    if (!confirm('Delete this expense?')) return;
+    const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
+    if (res.ok) { window.showToastNotification('Deleted'); loadExpenses(); loadSummary(); }
+}
+</script>
+{% endblock %}

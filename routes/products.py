@@ -18,10 +18,13 @@ def products_page():
 @login_required
 def list_products():
     search = request.args.get('search', '').strip()
+    category_id = request.args.get('category_id', type=int)
     query = Product.query
 
     if search:
         query = query.filter(Product.name.ilike(f'%{search}%') | Product.sku.ilike(f'%{search}%'))
+    if category_id:
+        query = query.filter(Product.category_id == category_id)
 
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 100, type=int), 500)
@@ -39,6 +42,8 @@ def list_products():
             'min_stock_level': p.min_stock_level,
             'image_url': p.image_url,
             'image_filename': p.image_filename,
+            'category_id': p.category_id,
+            'category_name': p.category.name if p.category else None,
         } for p in paginated.items],
         'pagination': {
             'page': paginated.page,
