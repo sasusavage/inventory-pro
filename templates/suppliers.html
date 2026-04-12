@@ -30,8 +30,10 @@
 
 <div id="supp-modal" class="modal">
     <div class="modal-content">
-        <span class="close-modal" onclick="closeSuppModal()">&times;</span>
-        <h2>Add Registered Supplier</h2>
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Add Registered Supplier</h2>
+            <button class="close-modal" onclick="closeSuppModal()">&times;</button>
+        </div>
         <form id="supp-form">
             <div class="form-group">
                 <label>Company Name</label>
@@ -72,8 +74,8 @@
         `).join('');
     }
 
-    function openSuppModal() { document.getElementById('supp-modal').style.display = 'block'; }
-    function closeSuppModal() { document.getElementById('supp-modal').style.display = 'none'; }
+    function openSuppModal() { document.getElementById('supp-modal').classList.add('active'); }
+    function closeSuppModal() { document.getElementById('supp-modal').classList.remove('active'); }
 
     document.getElementById('supp-form').addEventListener('submit', async (e) => {
         e.preventDefault();

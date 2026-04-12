@@ -1,27 +1,50 @@
 {% extends "layout.html" %}
-
 {% block title %}Sales History - InventoryPro{% endblock %}
 
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">Sales & History</h2>
-    <div class="flex items-center gap-2" style="flex-wrap:wrap;justify-content:flex-end;">
-        <input type="text" id="sales-search" class="form-control" placeholder="Search customer..." style="width:200px;">
-        <select id="status-filter" class="form-control" style="width:130px;">
-            <option value="">All Statuses</option>
-            <option value="PAID">Paid</option>
-            <option value="PARTIAL">Partial</option>
-            <option value="UNPAID">Unpaid</option>
-        </select>
-        <input type="date" id="date-from" class="form-control" style="width:150px;" title="From date">
-        <input type="date" id="date-to" class="form-control" style="width:150px;" title="To date">
-        <button class="btn btn-secondary" onclick="applyFilters()">Filter</button>
-        <a href="/export/sales.csv" class="btn btn-secondary">📊 Export CSV</a>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <a href="/export/sales.csv" class="btn btn-secondary btn-sm">📊 Export CSV</a>
+        <button class="btn btn-primary btn-sm" onclick="toggleFilters()">⚙ Filters</button>
     </div>
 </header>
 
+<!-- Collapsible filter panel -->
+<div id="filter-panel" style="display:none; margin-bottom:1rem;">
+    <div class="card" style="padding:1rem;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+            <div class="form-group" style="margin-bottom:0.5rem; grid-column:1/-1;">
+                <label>Search customer</label>
+                <input type="text" id="sales-search" class="form-control" placeholder="Customer name…">
+            </div>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <label>Status</label>
+                <select id="status-filter" class="form-control">
+                    <option value="">All</option>
+                    <option value="PAID">Paid</option>
+                    <option value="PARTIAL">Partial</option>
+                    <option value="UNPAID">Unpaid</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <label>From date</label>
+                <input type="date" id="date-from" class="form-control">
+            </div>
+            <div class="form-group" style="margin-bottom:0; grid-column:1/-1;">
+                <label>To date</label>
+                <input type="date" id="date-to" class="form-control">
+            </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="applyFilters()">Apply Filters</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+        </div>
+    </div>
+</div>
+
 <div class="table-container">
-    <table class="table">
+    <table>
         <thead>
             <tr>
                 <th>Date</th>
@@ -31,104 +54,115 @@
                 <th>Paid</th>
                 <th>Balance</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th>Receipt</th>
             </tr>
         </thead>
         <tbody id="sales-tbody">
-            <tr><td colspan="8" class="text-center">Loading sales...</td></tr>
+            <tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading sales…</td></tr>
         </tbody>
     </table>
 </div>
 
-<!-- Pagination -->
-<div id="pagination-bar" class="flex items-center gap-2" style="margin-top:1rem;justify-content:center;display:none;">
-    <button class="btn btn-secondary btn-sm" id="prev-btn" onclick="changePage(-1)">← Prev</button>
-    <span id="page-info" style="color:var(--text-muted);font-size:0.9rem;"></span>
-    <button class="btn btn-secondary btn-sm" id="next-btn" onclick="changePage(1)">Next →</button>
+<div id="pagination-bar" class="pagination" style="display:none;">
+    <button id="prev-btn" onclick="changePage(-1)" disabled>← Prev</button>
+    <span id="page-info" style="font-size:0.82rem; color:var(--text-muted); padding:0 0.5rem;"></span>
+    <button id="next-btn" onclick="changePage(1)">Next →</button>
 </div>
 
 <script>
-    let currentPage = 1;
-    let totalPages = 1;
+let currentPage = 1;
+let totalPages  = 1;
+let filtersOpen = false;
 
-    document.addEventListener('DOMContentLoaded', () => loadSales());
-
-    async function loadSales(page = 1) {
-        currentPage = page;
-        const search = document.getElementById('sales-search').value.trim();
-        const status = document.getElementById('status-filter').value;
-        const dateFrom = document.getElementById('date-from').value;
-        const dateTo = document.getElementById('date-to').value;
-
-        const params = new URLSearchParams({ page, per_page: 50 });
-        if (search) params.set('search', search);
-        if (status) params.set('status', status);
-        if (dateFrom) params.set('date_from', dateFrom);
-        if (dateTo) params.set('date_to', dateTo + 'T23:59:59');
-
-        const tbody = document.getElementById('sales-tbody');
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading...</td></tr>';
-
-        try {
-            const res = await fetch(`/sales?${params}`);
-            const json = await res.json();
-
-            const sales = json.data || [];
-            const pagination = json.pagination || {};
-            totalPages = pagination.pages || 1;
-
-            updatePaginationBar(pagination);
-
-            if (sales.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No sales found.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = sales.map(s => {
-                const statusClass = s.payment_status === 'PAID' ? 'badge-success'
-                    : s.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger';
-                const itemsSummary = (s.items || []).map(i => `${i.product_name} (x${i.quantity})`).join(', ') || '—';
-
-                return `
-                    <tr>
-                        <td>${new Date(s.sale_date).toLocaleString()}</td>
-                        <td><strong>${s.customer_name}</strong></td>
-                        <td><small>${itemsSummary}</small></td>
-                        <td>$${s.total_amount.toFixed(2)}</td>
-                        <td>$${s.amount_paid.toFixed(2)}</td>
-                        <td class="${s.balance_due > 0 ? 'text-danger' : 'text-success'}">$${s.balance_due.toFixed(2)}</td>
-                        <td><span class="badge ${statusClass}">${s.payment_status}</span></td>
-                        <td>
-                            <a href="/sales/${s.id}/invoice" class="btn btn-secondary btn-sm" target="_blank">📄 Receipt</a>
-                        </td>
-                    </tr>`;
-            }).join('');
-        } catch (e) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading sales</td></tr>';
-        }
-    }
-
-    function updatePaginationBar(pagination) {
-        const bar = document.getElementById('pagination-bar');
-        if (!pagination.total || pagination.pages <= 1) { bar.style.display = 'none'; return; }
-        bar.style.display = 'flex';
-        document.getElementById('page-info').textContent =
-            `Page ${pagination.page} of ${pagination.pages} (${pagination.total} records)`;
-        document.getElementById('prev-btn').disabled = pagination.page <= 1;
-        document.getElementById('next-btn').disabled = pagination.page >= pagination.pages;
-    }
-
-    function changePage(dir) {
-        const next = currentPage + dir;
-        if (next < 1 || next > totalPages) return;
-        loadSales(next);
-    }
-
-    function applyFilters() { loadSales(1); }
-
-    // Trigger filter on Enter in search box
+document.addEventListener('DOMContentLoaded', () => {
+    loadSales();
     document.getElementById('sales-search').addEventListener('keydown', e => {
         if (e.key === 'Enter') applyFilters();
     });
+});
+
+function toggleFilters() {
+    filtersOpen = !filtersOpen;
+    document.getElementById('filter-panel').style.display = filtersOpen ? 'block' : 'none';
+}
+
+function applyFilters() { loadSales(1); }
+
+function clearFilters() {
+    document.getElementById('sales-search').value  = '';
+    document.getElementById('status-filter').value = '';
+    document.getElementById('date-from').value     = '';
+    document.getElementById('date-to').value       = '';
+    loadSales(1);
+}
+
+async function loadSales(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({ page, per_page: 50 });
+    const search = document.getElementById('sales-search').value.trim();
+    const status = document.getElementById('status-filter').value;
+    const from   = document.getElementById('date-from').value;
+    const to     = document.getElementById('date-to').value;
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (from)   params.set('date_from', from);
+    if (to)     params.set('date_to', to + 'T23:59:59');
+
+    const tbody = document.getElementById('sales-tbody');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:1.5rem; color:var(--text-muted);">Loading…</td></tr>';
+
+    try {
+        const res  = await fetch(`/sales?${params}`);
+        const json = await res.json();
+        const sales   = json.data       || [];
+        const pg      = json.pagination || {};
+        totalPages = pg.pages || 1;
+        renderPagination(pg);
+
+        if (!sales.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">No sales found.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = sales.map(s => {
+            const sc = s.payment_status === 'PAID' ? 'badge-success'
+                     : s.payment_status === 'PARTIAL' ? 'badge-warning' : 'badge-danger';
+            const items = (s.items || []).map(i => `${i.product_name} ×${i.quantity}`).join(', ') || '—';
+            return `
+            <tr>
+                <td style="white-space:nowrap; font-size:0.8rem;">${new Date(s.sale_date).toLocaleString()}</td>
+                <td><strong>${escHtml(s.customer_name)}</strong></td>
+                <td style="max-width:180px;"><small style="color:var(--text-muted);">${escHtml(items)}</small></td>
+                <td style="font-weight:600;">$${s.total_amount.toFixed(2)}</td>
+                <td>$${s.amount_paid.toFixed(2)}</td>
+                <td class="${s.balance_due > 0 ? 'text-danger' : 'text-success'}">$${s.balance_due.toFixed(2)}</td>
+                <td><span class="badge ${sc}">${s.payment_status}</span></td>
+                <td><a href="/sales/${s.id}/receipt" class="btn btn-secondary btn-sm" target="_blank">🖨️</a></td>
+            </tr>`;
+        }).join('');
+    } catch {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">Error loading sales</td></tr>';
+    }
+}
+
+function renderPagination(pg) {
+    const bar = document.getElementById('pagination-bar');
+    if (!pg.total || pg.pages <= 1) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('page-info').textContent =
+        `Page ${pg.page} of ${pg.pages} (${pg.total} records)`;
+    document.getElementById('prev-btn').disabled = pg.page <= 1;
+    document.getElementById('next-btn').disabled = pg.page >= pg.pages;
+}
+
+function changePage(dir) {
+    const next = currentPage + dir;
+    if (next < 1 || next > totalPages) return;
+    loadSales(next);
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 {% endblock %}

@@ -34,8 +34,10 @@
 <!-- Simple PO Modal -->
 <div id="po-modal" class="modal">
     <div class="modal-content">
-        <span class="close-modal" onclick="closePOModal()">&times;</span>
-        <h2>New Stock Procurement</h2>
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">New Stock Procurement</h2>
+            <button class="close-modal" onclick="closePOModal()">&times;</button>
+        </div>
         <form id="po-form">
             <div class="grid-2-col">
                 <div class="form-group">
@@ -96,8 +98,9 @@
     async function loadSuppliersAndProducts() {
         const [suppRes, prodRes] = await Promise.all([fetch('/suppliers'), fetch('/products')]);
         const suppliers = await suppRes.json();
-        const products = await prodRes.json();
-        
+        const prodJson = await prodRes.json();
+        const products = Array.isArray(prodJson) ? prodJson : (prodJson.data || []);
+
         const suppSelect = document.getElementById('p-supplier');
         const prodSelect = document.getElementById('p-product');
 
@@ -116,8 +119,8 @@
         });
     }
 
-    function openPOModal() { document.getElementById('po-modal').style.display = 'block'; }
-    function closePOModal() { document.getElementById('po-modal').style.display = 'none'; }
+    function openPOModal() { document.getElementById('po-modal').classList.add('active'); }
+    function closePOModal() { document.getElementById('po-modal').classList.remove('active'); }
 
     document.getElementById('po-form').addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -3,295 +3,232 @@
 
 {% block content %}
 
-<!-- ═══════════════════════════════════════════════════════════════════
-     LOW STOCK BANNER  (always visible, collapses when everything is OK)
-════════════════════════════════════════════════════════════════════ -->
-<div id="low-stock-banner" style="display:none;margin-bottom:1.5rem;">
-    <!-- header row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;
-                margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem;">
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <span id="ls-icon" style="font-size:1.6rem;"></span>
+<!-- ── LOW STOCK BANNER ──────────────────────────────────────────────────── -->
+<div id="low-stock-banner" style="display:none; margin-bottom:1.25rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between;
+                flex-wrap:wrap; gap:0.6rem; margin-bottom:0.75rem;">
+        <div style="display:flex; align-items:center; gap:0.65rem;">
+            <span id="ls-icon" style="font-size:1.5rem;"></span>
             <div>
-                <h2 style="margin:0;font-size:1.1rem;" id="ls-headline"></h2>
-                <p style="margin:0;color:var(--text-muted);font-size:0.82rem;" id="ls-sub"></p>
+                <h2 id="ls-headline" style="margin:0; font-size:1rem; font-weight:700;"></h2>
+                <p id="ls-sub" style="margin:0; color:var(--text-muted); font-size:0.78rem;"></p>
             </div>
         </div>
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <span id="ls-refresh-label"
-                  style="font-size:0.78rem;color:var(--text-muted);">Auto-refreshes every 60 s</span>
-            <button class="btn btn-secondary btn-sm" onclick="loadLowStock(true)">↻ Refresh</button>
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0;">
+            <span style="font-size:0.75rem; color:var(--text-muted);">Auto-refresh 60s</span>
+            <button class="btn btn-secondary btn-sm" onclick="loadLowStock(true)">↻</button>
         </div>
     </div>
-
-    <!-- product cards grid -->
     <div id="ls-cards"
-         style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:0.75rem;">
+         style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0.65rem;">
     </div>
 </div>
 
-<!-- All-OK banner (shown when no low-stock items) -->
-<div id="all-ok-banner" style="display:none;margin-bottom:1.5rem;">
-    <div class="card" style="border:1px solid rgba(16,185,129,0.3);
-                             background:rgba(16,185,129,0.05);padding:1rem 1.25rem;">
-        <div style="display:flex;align-items:center;gap:0.75rem;">
-            <span style="font-size:1.5rem;">✅</span>
-            <div>
+<!-- ── ALL-OK BANNER ─────────────────────────────────────────────────────── -->
+<div id="all-ok-banner" style="display:none; margin-bottom:1.25rem;">
+    <div class="card" style="border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.05); padding:1rem;">
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+            <span style="font-size:1.4rem;">✅</span>
+            <div style="flex:1; min-width:0;">
                 <strong>All stock levels healthy</strong>
-                <p style="color:var(--text-muted);font-size:0.82rem;margin:0;">
+                <p style="color:var(--text-muted); font-size:0.8rem; margin:0;">
                     Every product is above its minimum threshold.
                 </p>
             </div>
-            <span style="margin-left:auto;font-size:0.78rem;color:var(--text-muted);">
-                Last checked: <span id="ok-last-checked">—</span>
+            <span style="font-size:0.75rem; color:var(--text-muted); flex-shrink:0;">
+                Checked: <span id="ok-last-checked">—</span>
             </span>
         </div>
     </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════
-     STATS GRID
-════════════════════════════════════════════════════════════════════ -->
+<!-- ── STATS GRID ────────────────────────────────────────────────────────── -->
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-icon sales">💰</div>
-        <div class="stat-info">
-            <h3>Total Sales</h3>
-            <p id="total-sales">$0.00</p>
-        </div>
+        <div class="stat-info"><h3>Total Sales</h3><p id="total-sales">$0.00</p></div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orders">📦</div>
-        <div class="stat-info">
-            <h3>Orders</h3>
-            <p id="total-orders">0</p>
-        </div>
+        <div class="stat-info"><h3>Orders</h3><p id="total-orders">0</p></div>
     </div>
-    <!-- Low-stock count — always visible -->
-    <div class="stat-card" id="stat-low-stock"
-         style="cursor:pointer;" onclick="scrollToLowStock()"
-         title="Click to see low-stock products">
+    <div class="stat-card" style="cursor:pointer;" onclick="scrollToLowStock()" title="View low-stock items">
         <div class="stat-icon" style="background:var(--gradient-warning);">⚠️</div>
-        <div class="stat-info">
-            <h3>Low Stock Items</h3>
-            <p id="low-stock-count" style="color:#f59e0b;">—</p>
-        </div>
+        <div class="stat-info"><h3>Low Stock</h3><p id="low-stock-count" style="color:#f59e0b;">—</p></div>
     </div>
     <div class="stat-card admin-only">
         <div class="stat-icon profit">📈</div>
-        <div class="stat-info">
-            <h3>Stock Value</h3>
-            <p id="stock-value">$0.00</p>
-        </div>
+        <div class="stat-info"><h3>Stock Value</h3><p id="stock-value">$0.00</p></div>
     </div>
     <div class="stat-card admin-only">
         <div class="stat-icon expenses">💸</div>
-        <div class="stat-info">
-            <h3>Supplier Spend</h3>
-            <p id="total-expenses">$0.00</p>
+        <div class="stat-info"><h3>Supplier Spend</h3><p id="total-expenses">$0.00</p></div>
+    </div>
+</div>
+
+<!-- ── DEBT SUMMARY ──────────────────────────────────────────────────────── -->
+<div class="card admin-only" style="margin-top:1.5rem;">
+    <div class="card-header"><h3>💳 Debt Summary</h3></div>
+    <div style="display:grid; grid-template-columns:1fr; gap:0.75rem;">
+        <div class="debt-box">
+            <h4>Accounts Receivable (Customers owe us)</h4>
+            <p class="debt-amount text-success" id="ar-amount">$0.00</p>
+        </div>
+        <div class="debt-box">
+            <h4>Accounts Payable (We owe suppliers)</h4>
+            <p class="debt-amount text-danger" id="ap-amount">$0.00</p>
         </div>
     </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════
-     DEBT SUMMARY (admin only)
-════════════════════════════════════════════════════════════════════ -->
-<div class="card admin-only" style="margin-top:2rem;">
-    <div class="card-header">
-        <h3>💳 Debt Summary</h3>
-    </div>
-    <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
-        <div class="debt-box">
-            <h4 style="color:var(--text-muted);font-size:0.85rem;margin-bottom:0.25rem;">
-                Accounts Receivable (Customers owe us)
-            </h4>
-            <p class="debt-amount text-success" id="ar-amount" style="font-size:1.8rem;font-weight:700;">$0.00</p>
-        </div>
-        <div class="debt-box">
-            <h4 style="color:var(--text-muted);font-size:0.85rem;margin-bottom:0.25rem;">
-                Accounts Payable (We owe suppliers)
-            </h4>
-            <p class="debt-amount text-danger" id="ap-amount" style="font-size:1.8rem;font-weight:700;">$0.00</p>
-        </div>
-    </div>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════
-     STOCK MOVEMENTS (admin only)
-════════════════════════════════════════════════════════════════════ -->
-<div class="card admin-only" style="margin-top:2rem;">
+<!-- ── STOCK MOVEMENTS ───────────────────────────────────────────────────── -->
+<div class="card admin-only" style="margin-top:1.5rem;">
     <div class="card-header">
         <h3>📜 Recent Stock Movements</h3>
-        <input type="text" id="log-search" placeholder="Search..." onkeyup="filterLogs()"
-               class="form-control" style="width:200px;">
+        <input type="text" id="log-search" placeholder="Search…" onkeyup="filterLogs()"
+               class="form-control" style="max-width:180px;">
     </div>
-    <div class="table-container" style="max-height:400px;overflow-y:auto;">
-        <table class="table">
+    <div class="table-container" style="max-height:380px; overflow-y:auto; margin-bottom:0;">
+        <table>
             <thead>
                 <tr>
                     <th>Time</th><th>Product</th><th>Change</th><th>Reason</th><th>Ref</th>
                 </tr>
             </thead>
             <tbody id="logs-tbody">
-                <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                <tr><td colspan="5" class="text-center" style="padding:1.5rem; color:var(--text-muted);">Loading…</td></tr>
             </tbody>
         </table>
     </div>
 </div>
 
+<style>
+    /* Debt grid goes 2-col on wider screens */
+    @media (min-width: 640px) {
+        #debt-grid { grid-template-columns: 1fr 1fr !important; }
+    }
+</style>
 <script>
-    /* ── Boot ──────────────────────────────────────────────────────── */
+    /* Fix debt grid ID */
+    document.querySelector('.card.admin-only .card-header + div')?.setAttribute('id','debt-grid');
+</script>
+
+<script>
     document.addEventListener('DOMContentLoaded', () => {
         loadStats();
         loadLowStock();
         loadLogs();
-
-        // Auto-refresh low-stock every 60 seconds
         setInterval(() => loadLowStock(false), 60_000);
     });
 
-    /* ── Stats ─────────────────────────────────────────────────────── */
     async function loadStats() {
         try {
             const res  = await fetch('/dashboard/stats');
             const data = await res.json();
-
             document.getElementById('total-sales').textContent =
                 data.total_sales != null ? `$${data.total_sales.toFixed(2)}` : '$0.00';
             document.getElementById('total-orders').textContent = data.total_orders ?? 0;
-
             if (data.stock_value !== undefined) {
-                document.getElementById('stock-value').textContent  = `$${data.stock_value.toFixed(2)}`;
+                document.getElementById('stock-value').textContent    = `$${data.stock_value.toFixed(2)}`;
                 document.getElementById('total-expenses').textContent = `$${data.total_expenses.toFixed(2)}`;
-                document.getElementById('ar-amount').textContent    = `$${data.accounts_receivable.toFixed(2)}`;
-                document.getElementById('ap-amount').textContent    = `$${data.accounts_payable.toFixed(2)}`;
+                document.getElementById('ar-amount').textContent      = `$${data.accounts_receivable.toFixed(2)}`;
+                document.getElementById('ap-amount').textContent      = `$${data.accounts_payable.toFixed(2)}`;
             }
         } catch (e) { console.error('Stats failed', e); }
     }
 
-    /* ── Low Stock Widget ──────────────────────────────────────────── */
     async function loadLowStock(showSpinner = false) {
         if (showSpinner) {
             document.getElementById('ls-cards').innerHTML =
-                '<p style="color:var(--text-muted);font-size:0.88rem;">Refreshing…</p>';
+                '<p style="color:var(--text-muted); font-size:0.85rem; padding:0.5rem;">Refreshing…</p>';
         }
-
         try {
             const res  = await fetch('/dashboard/stock-intelligence');
             const data = await res.json();
-
-            // Update the stat-card count badge
             document.getElementById('low-stock-count').textContent = data.length || '0';
 
             if (!data.length) {
                 document.getElementById('low-stock-banner').style.display = 'none';
-                document.getElementById('all-ok-banner').style.display = 'block';
-                document.getElementById('ok-last-checked').textContent =
-                    new Date().toLocaleTimeString();
+                document.getElementById('all-ok-banner').style.display    = 'block';
+                document.getElementById('ok-last-checked').textContent    = new Date().toLocaleTimeString();
                 return;
             }
 
-            document.getElementById('all-ok-banner').style.display  = 'none';
+            document.getElementById('all-ok-banner').style.display   = 'none';
             document.getElementById('low-stock-banner').style.display = 'block';
 
-            // Determine overall urgency (is anything completely out?)
             const critical = data.filter(p => p.current_stock <= 0);
             const warning  = data.filter(p => p.current_stock > 0);
 
             if (critical.length) {
-                document.getElementById('ls-icon').textContent      = '🔴';
-                document.getElementById('ls-headline').textContent  =
-                    `${critical.length} product${critical.length > 1 ? 's' : ''} OUT OF STOCK`;
+                document.getElementById('ls-icon').textContent     = '🔴';
+                document.getElementById('ls-headline').textContent = `${critical.length} product${critical.length > 1 ? 's' : ''} OUT OF STOCK`;
                 document.getElementById('ls-headline').style.color = '#f43f5e';
-                document.getElementById('ls-sub').textContent =
-                    warning.length
-                        ? `+ ${warning.length} more running low — reorder soon`
-                        : 'Immediate restocking needed';
+                document.getElementById('ls-sub').textContent      = warning.length ? `+ ${warning.length} more running low` : 'Immediate restocking needed';
             } else {
-                document.getElementById('ls-icon').textContent      = '🟠';
-                document.getElementById('ls-headline').textContent  =
-                    `${data.length} product${data.length > 1 ? 's' : ''} running low`;
+                document.getElementById('ls-icon').textContent     = '🟠';
+                document.getElementById('ls-headline').textContent = `${data.length} product${data.length > 1 ? 's' : ''} running low`;
                 document.getElementById('ls-headline').style.color = '#f59e0b';
-                document.getElementById('ls-sub').textContent       =
-                    'Stock has dropped to or below the minimum threshold';
+                document.getElementById('ls-sub').textContent      = 'Stock at or below minimum threshold';
             }
 
-            // Render product cards
             document.getElementById('ls-cards').innerHTML = data.map(p => {
-                const isCritical = p.current_stock <= 0;
-                const borderColor = isCritical ? '#f43f5e' : '#f59e0b';
-                const bgColor     = isCritical
-                    ? 'rgba(244,63,94,0.07)'
-                    : 'rgba(245,158,11,0.07)';
-
-                // Stock bar: fill % relative to min_stock_level (capped at 100%)
-                // We get current_stock from p. min comes from… let's cap bar at 2× min
-                const barMax  = Math.max((p.min_stock || 10) * 2, p.current_stock, 1);
-                const barPct  = Math.min(100, (p.current_stock / barMax) * 100);
-                const barColor = isCritical ? '#f43f5e' : '#f59e0b';
-
+                const isCrit   = p.current_stock <= 0;
+                const border   = isCrit ? '#f43f5e' : '#f59e0b';
+                const bg       = isCrit ? 'rgba(244,63,94,0.06)' : 'rgba(245,158,11,0.06)';
+                const barMax   = Math.max((p.min_stock || 10) * 2, p.current_stock, 1);
+                const barPct   = Math.min(100, (p.current_stock / barMax) * 100);
                 return `
-                <div style="background:${bgColor};border:1px solid ${borderColor};
-                            border-radius:var(--radius-md);padding:1rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;
-                                margin-bottom:0.5rem;">
-                        <strong style="font-size:0.95rem;">${escHtml(p.name)}</strong>
-                        <span class="badge ${isCritical ? 'badge-danger' : 'badge-warning'}"
-                              style="flex-shrink:0;margin-left:0.5rem;">
-                            ${isCritical ? 'OUT' : p.prediction_text}
+                <div style="background:${bg}; border:1px solid ${border};
+                            border-radius:var(--radius-md); padding:0.9rem;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.4rem; gap:0.4rem;">
+                        <strong style="font-size:0.88rem; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(p.name)}</strong>
+                        <span class="badge ${isCrit ? 'badge-danger' : 'badge-warning'}" style="flex-shrink:0;">
+                            ${isCrit ? 'OUT' : p.prediction_text}
                         </span>
                     </div>
-                    <div style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.6rem;">
-                        <span>${p.current_stock} in stock</span>
-                        ${p.min_stock ? `&nbsp;·&nbsp; min ${p.min_stock}` : ''}
+                    <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.5rem;">
+                        ${p.current_stock} in stock${p.min_stock ? ` · min ${p.min_stock}` : ''}
                     </div>
-                    <!-- Stock bar -->
-                    <div style="background:var(--bg-elevated);border-radius:99px;
-                                height:6px;overflow:hidden;">
-                        <div style="width:${barPct}%;height:100%;
-                                    background:${barColor};border-radius:99px;
-                                    transition:width 0.4s ease;"></div>
+                    <div style="background:var(--bg-elevated); border-radius:99px; height:5px; overflow:hidden;">
+                        <div style="width:${barPct}%; height:100%; background:${border}; border-radius:99px; transition:width 0.4s ease;"></div>
                     </div>
                 </div>`;
             }).join('');
         } catch (e) {
             console.error('Low stock failed', e);
             document.getElementById('ls-cards').innerHTML =
-                '<p class="text-danger" style="font-size:0.88rem;">Could not load stock data.</p>';
+                '<p class="text-danger" style="font-size:0.85rem;">Could not load stock data.</p>';
         }
     }
 
     function scrollToLowStock() {
         const el = document.getElementById('low-stock-banner');
-        if (el && el.style.display !== 'none') {
-            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        if (el && el.style.display !== 'none') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    /* ── Stock Movements ───────────────────────────────────────────── */
     async function loadLogs() {
         try {
             const res  = await fetch('/dashboard/movements');
             const data = await res.json();
             const tb   = document.getElementById('logs-tbody');
             if (!data.length) {
-                tb.innerHTML = '<tr><td colspan="5" class="text-center">No movements recorded</td></tr>';
+                tb.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:1.5rem; color:var(--text-muted);">No movements recorded</td></tr>';
                 return;
             }
             tb.innerHTML = data.map(log => {
                 const cls = log.change > 0 ? 'text-success' : 'text-danger';
                 return `<tr>
-                    <td>${new Date(log.timestamp).toLocaleString()}</td>
+                    <td style="white-space:nowrap;">${new Date(log.timestamp).toLocaleString()}</td>
                     <td>${escHtml(log.product)}</td>
                     <td class="${cls}"><strong>${log.change > 0 ? '+' : ''}${log.change}</strong></td>
                     <td>${escHtml(log.reason)}</td>
                     <td>${log.ref || '—'}</td>
                 </tr>`;
             }).join('');
-        } catch (e) {
-            if (document.getElementById('logs-tbody'))
-                document.getElementById('logs-tbody').innerHTML =
-                    '<tr><td colspan="5" class="text-center text-danger">Error loading logs</td></tr>';
+        } catch {
+            const tb = document.getElementById('logs-tbody');
+            if (tb) tb.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading logs</td></tr>';
         }
     }
 
@@ -302,11 +239,8 @@
         });
     }
 
-    /* ── Util ──────────────────────────────────────────────────────── */
     function escHtml(str) {
-        return String(str ?? '')
-            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 </script>
 {% endblock %}
