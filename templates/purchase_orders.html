@@ -4,54 +4,49 @@
 
 {% block content %}
 <header class="page-header">
-    <h2 class="page-title">Stock Procurement & Purchase Orders</h2>
+    <h2 class="page-title">Purchase Orders</h2>
     <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
-        <input type="text" id="po-search" class="form-control" placeholder="🔍 Search orders..." style="width:220px;">
-        <button class="btn btn-primary" onclick="openPOModal()">+ New Purchase Order</button>
+        <input type="text" id="po-search" class="form-control" placeholder="🔍 Search…" style="width:190px;">
+        <button class="btn btn-primary btn-sm" onclick="openPOModal()">+ New Order</button>
     </div>
 </header>
 
-<div class="table-container" style="overflow-x:auto;">
-    <table style="min-width:700px;">
+<div class="table-container">
+    <table>
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Supplier</th>
-                <th>Product</th>
-                <th>Quantity</th>
-                <th>Price / Unit</th>
-                <th>Type</th>
-                <th>Total Bill</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Payment</th>
                 <th>Status</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody id="po-tbody">
-            <tr><td colspan="8" class="text-center">Loading orders...</td></tr>
+            <tr><td colspan="7" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading…</td></tr>
         </tbody>
     </table>
 </div>
 
-<!-- Simple PO Modal -->
+<div id="pagination-bar" class="pagination" style="display:none;">
+    <button id="prev-btn" onclick="changePage(-1)" disabled>← Prev</button>
+    <span id="page-info" style="font-size:0.82rem; color:var(--text-muted); padding:0 0.5rem;"></span>
+    <button id="next-btn" onclick="changePage(1)">Next →</button>
+</div>
+
+<!-- New PO Modal -->
 <div id="po-modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
-            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">New Stock Procurement</h2>
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">New Purchase Order</h2>
             <button class="close-modal" onclick="closePOModal()">&times;</button>
         </div>
         <form id="po-form">
-            <div class="grid-2-col">
-                <div class="form-group">
-                    <label>Supplier</label>
-                    <select id="p-supplier" class="form-control" required></select>
-                </div>
-                <div class="form-group">
-                    <label>Product</label>
-                    <select id="p-product" class="form-control" required></select>
-                </div>
-            </div>
-            <div class="grid-2-col">
-                <div class="form-group"><label>Quantity</label><input type="number" id="p-qty" class="form-control" required></div>
-                <div class="form-group"><label>Unit Cost ($)</label><input type="number" id="p-cost" class="form-control" step="0.01" required></div>
+            <div class="form-group">
+                <label>Supplier *</label>
+                <select id="p-supplier" class="form-control" required></select>
             </div>
             <div class="form-group">
                 <label>Payment Method</label>
@@ -60,101 +55,223 @@
                     <option value="Credit">Credit (Pay Later)</option>
                 </select>
             </div>
-            <button type="submit" class="btn btn-primary btn-block">Confirm Purchase</button>
+
+            <div style="margin-bottom:0.75rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                    <label style="margin:0; font-weight:600;">Order Items</label>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="addItemRow()">+ Add Item</button>
+                </div>
+                <div id="items-container" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+            </div>
+
+            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.75rem;">
+                Total: <span id="po-total-display" class="text-success">$0.00</span>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Confirm Order</button>
         </form>
     </div>
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        loadPOs();
-        loadSuppliersAndProducts();
-    });
+let currentPage = 1, totalPages = 1;
+let suppliersCache = [], productsCache = [];
 
-    async function loadPOs() {
-        const res = await fetch('/purchase-orders');
-        const data = await res.json();
-        const tbody = document.getElementById('po-tbody');
+document.addEventListener('DOMContentLoaded', () => {
+    loadPOs();
+    loadSuppliersAndProducts();
+    document.getElementById('po-search').addEventListener('input', filterTable);
+    document.getElementById('po-form').addEventListener('submit', submitPO);
+});
 
-        if (data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">No purchase history found.</td></tr>';
+async function loadPOs(page = 1) {
+    currentPage = page;
+    const tbody = document.getElementById('po-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:1.5rem; color:var(--text-muted);">Loading…</td></tr>';
+
+    try {
+        const res  = await fetch(`/purchase-orders?page=${page}&per_page=50`);
+        const json = await res.json();
+        const data = json.data || [];
+        const pg   = json.pagination || {};
+        totalPages = pg.pages || 1;
+        renderPagination(pg);
+
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:2rem; color:var(--text-muted);">No purchase orders found.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = data.map(po => `
+        tbody.innerHTML = data.map(po => {
+            const sc = po.status === 'Received' ? 'badge-success'
+                     : po.status === 'Cancelled' ? 'badge-danger' : 'badge-warning';
+            const pc = po.payment_type === 'Cash' ? 'badge-primary' : 'badge-secondary';
+            const actions = po.status === 'Pending' ? `
+                <button class="btn btn-primary btn-sm" onclick="receivePO(${po.id})">✓ Receive</button>
+                <button class="btn btn-secondary btn-sm" onclick="cancelPO(${po.id})">✗ Cancel</button>
+            ` : '—';
+            return `
             <tr>
-                <td>${new Date(po.order_date).toLocaleDateString()}</td>
-                <td><strong>${po.supplier_name}</strong></td>
-                <td>${po.product_name}</td>
-                <td>${po.quantity}</td>
-                <td>$${po.cost_price.toFixed(2)}</td>
-                <td><span class="badge ${po.payment_type === 'Cash' ? 'badge-primary' : 'badge-secondary'}">${po.payment_type}</span></td>
-                <td><strong>$${po.total_amount.toFixed(2)}</strong></td>
-                <td><span class="badge ${po.status === 'RECEIVED' ? 'badge-success' : 'badge-warning'}">${po.status}</span></td>
-            </tr>
-        `).join('');
+                <td style="white-space:nowrap; font-size:0.8rem;">${new Date(po.date).toLocaleDateString()}</td>
+                <td><strong>${escHtml(po.supplier)}</strong></td>
+                <td style="color:var(--text-muted); font-size:0.82rem;">${po.items_count} item${po.items_count !== 1 ? 's' : ''}</td>
+                <td style="font-weight:600;">$${(po.total || 0).toFixed(2)}</td>
+                <td><span class="badge ${pc}">${escHtml(po.payment_type)}</span></td>
+                <td><span class="badge ${sc}">${escHtml(po.status)}</span></td>
+                <td style="white-space:nowrap;">${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch {
+        document.getElementById('po-tbody').innerHTML =
+            '<tr><td colspan="7" class="text-center text-danger">Error loading purchase orders.</td></tr>';
     }
+}
 
-    async function loadSuppliersAndProducts() {
-        const [suppRes, prodRes] = await Promise.all([fetch('/suppliers'), fetch('/products')]);
-        const suppliers = await suppRes.json();
+function renderPagination(pg) {
+    const bar = document.getElementById('pagination-bar');
+    if (!pg.total || pg.pages <= 1) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('page-info').textContent = `Page ${pg.page} of ${pg.pages} (${pg.total} total)`;
+    document.getElementById('prev-btn').disabled = pg.page <= 1;
+    document.getElementById('next-btn').disabled = pg.page >= pg.pages;
+}
+
+function changePage(dir) {
+    const next = currentPage + dir;
+    if (next < 1 || next > totalPages) return;
+    loadPOs(next);
+}
+
+function filterTable() {
+    const term = document.getElementById('po-search').value.toLowerCase();
+    document.querySelectorAll('#po-tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
+    });
+}
+
+async function loadSuppliersAndProducts() {
+    try {
+        const [suppRes, prodRes] = await Promise.all([
+            fetch('/suppliers'),
+            fetch('/products?per_page=500'),
+        ]);
+        suppliersCache = await suppRes.json();
         const prodJson = await prodRes.json();
-        const products = Array.isArray(prodJson) ? prodJson : (prodJson.data || []);
+        productsCache  = Array.isArray(prodJson) ? prodJson : (prodJson.data || []);
 
-        const suppSelect = document.getElementById('p-supplier');
-        const prodSelect = document.getElementById('p-product');
-
-        suppliers.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = s.name;
-            suppSelect.appendChild(opt);
+        const sel = document.getElementById('p-supplier');
+        sel.innerHTML = '<option value="">Select supplier…</option>';
+        suppliersCache.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id; o.textContent = s.name;
+            sel.appendChild(o);
         });
+    } catch (e) { console.error('Failed to load suppliers/products', e); }
+}
 
-        products.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = `${p.name} (SKU: ${p.sku})`;
-            prodSelect.appendChild(opt);
-        });
+function openPOModal() {
+    document.getElementById('po-form').reset();
+    document.getElementById('items-container').innerHTML = '';
+    document.getElementById('po-total-display').textContent = '$0.00';
+    addItemRow();
+    document.getElementById('po-modal').classList.add('active');
+}
+
+function closePOModal() { document.getElementById('po-modal').classList.remove('active'); }
+
+function addItemRow() {
+    const container = document.getElementById('items-container');
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid; grid-template-columns:1fr auto auto auto; gap:0.4rem; align-items:center;';
+    row.innerHTML = `
+        <select class="form-control item-product" onchange="recalcTotal()">
+            <option value="">Select product…</option>
+            ${productsCache.map(p => `<option value="${p.id}" data-cost="${p.cost_price || 0}">${escHtml(p.name)}</option>`).join('')}
+        </select>
+        <input type="number" class="form-control item-qty" placeholder="Qty" min="1" value="1"
+               style="width:70px;" oninput="recalcTotal()">
+        <input type="number" class="form-control item-cost" placeholder="Cost" min="0" step="0.01"
+               style="width:90px;" oninput="recalcTotal()">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="this.closest('div').remove(); recalcTotal();">✕</button>
+    `;
+    row.querySelector('.item-product').addEventListener('change', function() {
+        const opt = this.selectedOptions[0];
+        const costInput = this.closest('div').querySelector('.item-cost');
+        if (opt && opt.dataset.cost) costInput.value = parseFloat(opt.dataset.cost).toFixed(2);
+        recalcTotal();
+    });
+    container.appendChild(row);
+}
+
+function recalcTotal() {
+    let total = 0;
+    document.querySelectorAll('#items-container > div').forEach(row => {
+        const qty  = parseFloat(row.querySelector('.item-qty').value) || 0;
+        const cost = parseFloat(row.querySelector('.item-cost').value) || 0;
+        total += qty * cost;
+    });
+    document.getElementById('po-total-display').textContent = '$' + total.toFixed(2);
+}
+
+async function submitPO(e) {
+    e.preventDefault();
+    const supplierId = parseInt(document.getElementById('p-supplier').value);
+    if (!supplierId) { window.showToastNotification('Select a supplier', 'error'); return; }
+
+    const items = [];
+    let valid = true;
+    document.querySelectorAll('#items-container > div').forEach(row => {
+        const productId = parseInt(row.querySelector('.item-product').value);
+        const qty       = parseInt(row.querySelector('.item-qty').value);
+        const cost      = parseFloat(row.querySelector('.item-cost').value);
+        if (!productId || !qty || !cost) { valid = false; return; }
+        items.push({ product_id: productId, quantity: qty, unit_cost: cost });
+    });
+
+    if (!valid || !items.length) {
+        window.showToastNotification('Fill in all item fields', 'error');
+        return;
     }
 
-    function openPOModal() { document.getElementById('po-modal').classList.add('active'); }
-    function closePOModal() { document.getElementById('po-modal').classList.remove('active'); }
-
-    document.getElementById('po-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const poData = {
-            supplier_id: parseInt(document.getElementById('p-supplier').value),
-            product_id: parseInt(document.getElementById('p-product').value),
-            quantity: parseInt(document.getElementById('p-qty').value),
-            cost_price: parseFloat(document.getElementById('p-cost').value),
-            payment_type: document.getElementById('p-pay-type').value
-        };
-
-        try {
-            const res = await fetch('/purchase-orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(poData)
-            });
-            if (res.ok) {
-                closePOModal();
-                loadPOs();
-                document.getElementById('po-form').reset();
-            } else {
-                const result = await res.json();
-                alert(result.error || 'Failed to record purchase');
-            }
-        } catch (err) { alert('Network error'); }
-    });
-
-    document.getElementById('po-search').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#po-tbody tr');
-        rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
+    try {
+        const res = await fetch('/purchase-orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                supplier_id: supplierId,
+                payment_type: document.getElementById('p-pay-type').value,
+                items,
+            }),
         });
-    });
+        const result = await res.json();
+        if (res.ok) {
+            window.showToastNotification('Purchase order created!');
+            closePOModal();
+            loadPOs(1);
+        } else {
+            window.showToastNotification(result.error || 'Failed to create order', 'error');
+        }
+    } catch { window.showToastNotification('Network error', 'error'); }
+}
+
+async function receivePO(id) {
+    if (!confirm('Mark this order as received? Stock will be updated.')) return;
+    const res = await fetch(`/purchase-orders/${id}/receive`, { method: 'POST' });
+    const d   = await res.json();
+    if (res.ok) { window.showToastNotification('Stock updated!'); loadPOs(currentPage); }
+    else window.showToastNotification(d.error || 'Failed', 'error');
+}
+
+async function cancelPO(id) {
+    if (!confirm('Cancel this purchase order?')) return;
+    const res = await fetch(`/purchase-orders/${id}/cancel`, { method: 'POST' });
+    const d   = await res.json();
+    if (res.ok) { window.showToastNotification('Order cancelled'); loadPOs(currentPage); }
+    else window.showToastNotification(d.error || 'Failed', 'error');
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 {% endblock %}
