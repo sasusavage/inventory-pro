@@ -1,0 +1,113 @@
+{% extends "layout.html" %}
+{% block title %}P&L Report - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">📈 Profit & Loss Report</h2>
+    <div style="display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap;">
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:0.78rem;">From</label>
+            <input type="date" id="df" class="form-control" style="width:150px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+            <label style="font-size:0.78rem;">To</label>
+            <input type="date" id="dt" class="form-control" style="width:150px;">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="loadPnL()">Run Report</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨️ Print</button>
+    </div>
+</header>
+
+<div id="pnl-content" style="display:flex; flex-direction:column; gap:1rem;">
+    <p style="color:var(--text-muted); padding:2rem; text-align:center;">Loading...</p>
+</div>
+
+<style>
+    .pnl-card { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1.25rem; }
+    .pnl-row { display:flex; justify-content:space-between; align-items:center; padding: 0.5rem 0; border-bottom:1px dashed var(--border-subtle); font-size:0.92rem;}
+    .pnl-row:last-child { border-bottom: none; }
+    .pnl-row.strong { font-weight:800; border-top:2px solid var(--border-subtle); padding-top:0.75rem; margin-top:0.5rem; font-size:1rem; border-bottom:none;}
+    .pnl-hdr { font-size:0.82rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.5rem; }
+    .pnl-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:0.75rem; }
+    .stat { background: var(--bg-elevated); border:1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1rem; text-align:center;}
+    .stat h4 { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:0.4rem; }
+    .stat p { font-size:1.4rem; font-weight:800; }
+    .positive { color:#15803d; }
+    .negative { color:#dc2626; }
+    @media print {
+        .page-header > div, .mobile-only, #mobile-menu-toggle, .sidebar, .sidebar-overlay, .top-bar { display:none !important; }
+        .main-content { margin-left:0 !important; padding:1rem !important; }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Default to this month
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('df').value = first.toISOString().slice(0,10);
+    document.getElementById('dt').value = now.toISOString().slice(0,10);
+    loadPnL();
+});
+
+async function loadPnL() {
+    const df = document.getElementById('df').value;
+    const dt = document.getElementById('dt').value;
+    const params = new URLSearchParams();
+    if (df) params.set('date_from', df);
+    if (dt) params.set('date_to', dt);
+
+    const box = document.getElementById('pnl-content');
+    box.innerHTML = '<p style="color:var(--text-muted); padding:2rem; text-align:center;">Crunching numbers...</p>';
+
+    try {
+        const d = await fetch(`/reports/pnl?${params}`).then(r => r.json());
+        if (d.error) { box.innerHTML = `<p class="text-danger" style="padding:1rem;">${d.error}</p>`; return; }
+        renderPnL(d);
+    } catch {
+        box.innerHTML = '<p class="text-danger" style="padding:1rem;">Failed to load P&L.</p>';
+    }
+}
+
+function renderPnL(d) {
+    const c = d.currency || '$';
+    const fmt = v => c + (v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sign = v => v >= 0 ? 'positive' : 'negative';
+
+    const expensesHtml = (d.expenses_by_category || []).map(e => `
+        <div class="pnl-row"><span>${esc(e.category)}</span><span>${fmt(e.amount)}</span></div>
+    `).join('') || '<div class="pnl-row" style="color:var(--text-muted);">No expenses recorded</div>';
+
+    document.getElementById('pnl-content').innerHTML = `
+        <div class="pnl-grid">
+            <div class="stat"><h4>Revenue</h4><p>${fmt(d.revenue)}</p></div>
+            <div class="stat"><h4>Gross Profit</h4><p class="${sign(d.gross_profit)}">${fmt(d.gross_profit)}</p></div>
+            <div class="stat"><h4>Total Expenses</h4><p class="negative">${fmt(d.total_expenses)}</p></div>
+            <div class="stat"><h4>Net Profit</h4><p class="${sign(d.net_profit)}">${fmt(d.net_profit)}</p></div>
+        </div>
+
+        <div class="pnl-card">
+            <div class="pnl-hdr">Revenue & Cost of Goods</div>
+            <div class="pnl-row"><span>Sales Revenue</span><span>${fmt(d.revenue)}</span></div>
+            <div class="pnl-row"><span>Cost of Goods Sold (COGS)</span><span class="negative">(${fmt(d.cogs)})</span></div>
+            <div class="pnl-row strong"><span>Gross Profit</span><span class="${sign(d.gross_profit)}">${fmt(d.gross_profit)} (${d.gross_margin_percent}%)</span></div>
+        </div>
+
+        <div class="pnl-card">
+            <div class="pnl-hdr">Operating Expenses</div>
+            ${expensesHtml}
+            <div class="pnl-row strong"><span>Total Expenses</span><span class="negative">(${fmt(d.total_expenses)})</span></div>
+        </div>
+
+        <div class="pnl-card" style="background: ${d.net_profit >= 0 ? '#dcfce7' : '#fee2e2'}; border-color: ${d.net_profit >= 0 ? '#86efac' : '#fca5a5'};">
+            <div class="pnl-row strong" style="font-size:1.15rem;">
+                <span>NET PROFIT</span>
+                <span class="${sign(d.net_profit)}">${fmt(d.net_profit)} (${d.net_margin_percent}%)</span>
+            </div>
+        </div>
+    `;
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

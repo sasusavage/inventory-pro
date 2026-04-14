@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, jsonify, session, make_re
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from io import BytesIO
-from models import db, Sale, SaleItem, Product, Customer
+from models import db, Sale, SaleItem, Product, Customer, ActivityLog
 from decorators import login_required
 from utils import log_stock_movement
 
@@ -192,6 +192,8 @@ def create_sale():
         else:
             new_sale.payment_status = 'UNPAID'
 
+        ActivityLog.log('CREATE_SALE', entity='sale', entity_id=new_sale.id,
+                        summary=f'Total {total:.2f}, paid {amount_paid:.2f}, status {new_sale.payment_status}')
         db.session.commit()
         from routes.dashboard import invalidate_stats_cache
         invalidate_stats_cache()
@@ -340,11 +342,25 @@ def generate_invoice(sale_id):
 @login_required
 def html_receipt(sale_id):
     """Browser-printable HTML receipt — no external dependencies needed."""
+    from flask import request as flask_req
     from models import AppSetting
     sale = Sale.query.options(
         joinedload(Sale.customer),
         joinedload(Sale.items).joinedload(SaleItem.product),
     ).get_or_404(sale_id)
     store_name = AppSetting.get('store_name', 'InventoryPro')
-    currency = AppSetting.get('currency', '$')
-    return render_template('receipt.html', sale=sale, store_name=store_name, currency=currency)
+    currency = AppSetting.get('store_currency') or AppSetting.get('currency', '$')
+    store_address = AppSetting.get('store_address', '')
+    store_phone = AppSetting.get('store_phone', '')
+    store_tagline = AppSetting.get('store_tagline', '')
+    receipt_url = flask_req.url_root.rstrip('/') + f'/sales/{sale.id}/receipt'
+    return render_template(
+        'receipt.html',
+        sale=sale,
+        store_name=store_name,
+        currency=currency,
+        store_address=store_address,
+        store_phone=store_phone,
+        store_tagline=store_tagline,
+        receipt_url=receipt_url,
+    )

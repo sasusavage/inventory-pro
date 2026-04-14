@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+{% block title %}Top Customers - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">🏆 Top Customers</h2>
+    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+        <select id="window-sel" class="form-control" style="width:150px;">
+            <option value="30">Last 30 days</option>
+            <option value="90" selected>Last 90 days</option>
+            <option value="180">Last 6 months</option>
+            <option value="365">Last 12 months</option>
+            <option value="3650">All time</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="load()">Refresh</button>
+    </div>
+</header>
+
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:640px;">
+        <thead>
+            <tr>
+                <th style="width:60px;">Rank</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th class="num">Orders</th>
+                <th class="num">Total Spent</th>
+                <th class="num">Outstanding</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="tc-tbody">
+            <tr><td colspan="7" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<style>
+    .rank-medal { font-size:1.4rem; font-weight:800; }
+    .rank-1 { color:#eab308; }
+    .rank-2 { color:#94a3b8; }
+    .rank-3 { color:#b45309; }
+    td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    load();
+    document.getElementById('window-sel').addEventListener('change', load);
+});
+
+async function load() {
+    const days = document.getElementById('window-sel').value;
+    const tbody = document.getElementById('tc-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:1.5rem; color:var(--text-muted);">Loading...</td></tr>';
+
+    try {
+        const d = await fetch(`/reports/top-customers?days=${days}`).then(r => r.json());
+        const rows = d.customers || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:2rem; color:var(--text-muted);">No sales in this window.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((c, i) => {
+            const rank = i + 1;
+            let medal = `<strong>${rank}</strong>`;
+            if (rank === 1) medal = '<span class="rank-medal rank-1">🥇</span>';
+            else if (rank === 2) medal = '<span class="rank-medal rank-2">🥈</span>';
+            else if (rank === 3) medal = '<span class="rank-medal rank-3">🥉</span>';
+            const outstanding = c.outstanding > 0
+                ? `<span class="text-danger">$${c.outstanding.toFixed(2)}</span>`
+                : `<span class="text-success">$0.00</span>`;
+            return `
+            <tr>
+                <td>${medal}</td>
+                <td><strong>${esc(c.name)}</strong></td>
+                <td><a href="tel:${esc(c.phone)}" style="color:var(--accent-primary);">${esc(c.phone)}</a></td>
+                <td class="num">${c.order_count}</td>
+                <td class="num"><strong>$${c.total_spent.toFixed(2)}</strong></td>
+                <td class="num">${outstanding}</td>
+                <td><a href="/customers/${c.customer_id}/statement" target="_blank" class="btn btn-secondary btn-sm">📄 Statement</a></td>
+            </tr>`;
+        }).join('');
+    } catch {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Failed to load leaderboard.</td></tr>';
+    }
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+{% endblock %}

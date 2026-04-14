@@ -1,10 +1,10 @@
 import csv
 import io
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, session, Response
+from flask import Blueprint, render_template, request, jsonify, session, Response
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from models import db, Sale, SaleItem, Customer, Product, StockMovement
+from models import db, Sale, SaleItem, Customer, Product, StockMovement, Expense, AppSetting
 from decorators import login_required
 
 reports_bp = Blueprint('reports', __name__)
@@ -83,6 +83,124 @@ def report_profit():
         'total_revenue': total_rev,
         'gross_profit': gross_profit,
         'margin_percentage': round((gross_profit / total_rev) * 100, 2) if total_rev > 0 else 0,
+    })
+
+
+@reports_bp.route('/top-customers-page')
+@login_required
+def top_customers_page():
+    if session.get('role') != 'admin':
+        return "Admins only", 403
+    return render_template('top_customers.html', user_role=session.get('role'))
+
+
+@reports_bp.route('/pnl-page')
+@login_required
+def pnl_page():
+    if session.get('role') != 'admin':
+        return "Admins only", 403
+    return render_template('pnl_report.html', user_role=session.get('role'))
+
+
+@reports_bp.route('/reports/pnl')
+@login_required
+def report_pnl():
+    """Profit & Loss: revenue, COGS, gross profit, expenses, net profit."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    date_from = request.args.get('date_from', '').strip()
+    date_to = request.args.get('date_to', '').strip()
+
+    df = dt = None
+    if date_from:
+        try: df = datetime.fromisoformat(date_from)
+        except ValueError: pass
+    if date_to:
+        try: dt = datetime.fromisoformat(date_to + 'T23:59:59')
+        except ValueError: pass
+
+    # Revenue + COGS from sale items
+    sales_q = db.session.query(
+        func.coalesce(func.sum(SaleItem.subtotal), 0).label('revenue'),
+        func.coalesce(func.sum(SaleItem.cost_price_at_sale * SaleItem.quantity), 0).label('cogs'),
+    ).join(Sale, Sale.id == SaleItem.sale_id).filter(SaleItem.status == 'Active')
+    if df: sales_q = sales_q.filter(Sale.sale_date >= df)
+    if dt: sales_q = sales_q.filter(Sale.sale_date <= dt)
+    sr = sales_q.one()
+    revenue = float(sr.revenue or 0)
+    cogs = float(sr.cogs or 0)
+    gross_profit = revenue - cogs
+
+    # Expenses
+    exp_q = db.session.query(
+        Expense.category, func.sum(Expense.amount).label('amt')
+    )
+    if df: exp_q = exp_q.filter(Expense.expense_date >= df)
+    if dt: exp_q = exp_q.filter(Expense.expense_date <= dt)
+    exp_rows = exp_q.group_by(Expense.category).all()
+
+    expenses_by_category = [
+        {'category': r.category or 'Uncategorized', 'amount': float(r.amt or 0)}
+        for r in exp_rows
+    ]
+    total_expenses = sum(e['amount'] for e in expenses_by_category)
+    net_profit = gross_profit - total_expenses
+
+    currency = AppSetting.get('store_currency') or AppSetting.get('currency', '$')
+
+    return jsonify({
+        'date_from': date_from or None,
+        'date_to': date_to or None,
+        'currency': currency,
+        'revenue': revenue,
+        'cogs': cogs,
+        'gross_profit': gross_profit,
+        'gross_margin_percent': round((gross_profit / revenue) * 100, 2) if revenue > 0 else 0,
+        'expenses_by_category': sorted(expenses_by_category, key=lambda x: -x['amount']),
+        'total_expenses': total_expenses,
+        'net_profit': net_profit,
+        'net_margin_percent': round((net_profit / revenue) * 100, 2) if revenue > 0 else 0,
+    })
+
+
+@reports_bp.route('/reports/top-customers')
+@login_required
+def report_top_customers():
+    """Top customers ranked by total spend over the window."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    days = min(int(request.args.get('days', 90) or 90), 3650)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    rows = (
+        db.session.query(
+            Customer.id,
+            Customer.full_name,
+            Customer.phone,
+            func.count(Sale.id).label('order_count'),
+            func.sum(Sale.total_amount).label('total_spent'),
+            func.sum(Sale.balance_due).label('outstanding'),
+        )
+        .join(Sale, Sale.customer_id == Customer.id)
+        .filter(Sale.sale_date >= since)
+        .group_by(Customer.id, Customer.full_name, Customer.phone)
+        .order_by(func.sum(Sale.total_amount).desc())
+        .limit(20)
+        .all()
+    )
+
+    return jsonify({
+        'days': days,
+        'customers': [{
+            'customer_id': r.id,
+            'name': r.full_name,
+            'phone': r.phone,
+            'order_count': int(r.order_count or 0),
+            'total_spent': float(r.total_spent or 0),
+            'outstanding': float(r.outstanding or 0),
+        } for r in rows],
     })
 
 

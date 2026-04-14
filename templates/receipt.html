@@ -40,7 +40,6 @@
         .btn-print { background: #4f46e5; color: #fff; }
         .btn-back  { background: #fff; color: #0f172a; border: 1px solid #e2e8f0; }
 
-        /* Receipt paper */
         .receipt {
             background: #fff;
             width: 100%;
@@ -57,6 +56,12 @@
             margin-bottom: 1.25rem;
         }
 
+        .store-logo {
+            font-size: 2.25rem;
+            margin-bottom: 0.35rem;
+            line-height: 1;
+        }
+
         .store-name {
             font-size: 1.4rem;
             font-weight: 800;
@@ -65,10 +70,19 @@
             font-family: Arial, sans-serif;
         }
 
-        .receipt-subtitle {
+        .store-meta {
             font-size: 0.75rem;
             color: #64748b;
-            margin-top: 0.25rem;
+            margin-top: 0.3rem;
+            line-height: 1.5;
+        }
+
+        .receipt-subtitle {
+            font-size: 0.78rem;
+            color: #94a3b8;
+            margin-top: 0.5rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
         .receipt-meta {
@@ -148,9 +162,31 @@
             {% endif %}
         }
 
+        .qr-section {
+            text-align: center;
+            margin-top: 1.25rem;
+            padding-top: 1.25rem;
+            border-top: 2px dashed #e2e8f0;
+        }
+
+        .qr-section img {
+            width: 110px;
+            height: 110px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 4px;
+            background: #fff;
+        }
+
+        .qr-caption {
+            font-size: 0.72rem;
+            color: #64748b;
+            margin-top: 0.4rem;
+        }
+
         .receipt-footer {
             text-align: center;
-            margin-top: 1.5rem;
+            margin-top: 1.25rem;
             padding-top: 1rem;
             border-top: 2px dashed #e2e8f0;
             font-size: 0.78rem;
@@ -158,7 +194,6 @@
             line-height: 1.6;
         }
 
-        /* Print styles */
         @media print {
             body { background: #fff; padding: 0; }
             .receipt-actions { display: none !important; }
@@ -186,7 +221,11 @@
 
 <div class="receipt">
     <div class="receipt-header">
+        <div class="store-logo">🏪</div>
         <div class="store-name">{{ store_name }}</div>
+        {% if store_tagline %}<div class="store-meta">{{ store_tagline }}</div>{% endif %}
+        {% if store_address %}<div class="store-meta">{{ store_address }}</div>{% endif %}
+        {% if store_phone %}<div class="store-meta">📞 {{ store_phone }}</div>{% endif %}
         <div class="receipt-subtitle">Sales Receipt</div>
     </div>
 
@@ -234,6 +273,13 @@
             <span>{% if sale.balance_due > 0 %}Balance Due{% else %}Change / Overpaid{% endif %}</span>
             <span>{{ currency }}{{ "%.2f"|format(sale.balance_due|abs) }}</span>
         </div>
+    </div>
+
+    <div class="qr-section">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={{ receipt_url|urlencode }}"
+             alt="Scan for digital receipt"
+             onerror="this.parentElement.style.display='none'">
+        <div class="qr-caption">Scan to view this receipt online</div>
     </div>
 
     <div class="receipt-footer">

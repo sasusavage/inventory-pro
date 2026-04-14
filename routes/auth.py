@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
-from models import db, User
+from models import db, User, ActivityLog
 from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
@@ -23,13 +23,22 @@ def login():
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
         session['user_id'] = user.id
+        session['username'] = user.username
         session['role'] = user.role
+        ActivityLog.log('LOGIN', entity='user', entity_id=user.id, summary=f'{user.username} signed in')
+        db.session.commit()
         return jsonify({'message': 'Login successful', 'role': user.role})
+    ActivityLog.log('LOGIN_FAILED', entity='user', summary=f'Failed login for "{username}"')
+    db.session.commit()
     return jsonify({'error': 'Invalid credentials'}), 401
 
 
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
+    username = session.get('username') or session.get('user_id')
+    if username:
+        ActivityLog.log('LOGOUT', entity='user', summary=f'{username} signed out')
+        db.session.commit()
     session.clear()
     return jsonify({'message': 'Logged out'})
 

@@ -5,65 +5,276 @@
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">Returns & Refunds</h2>
-    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
-        <input type="text" id="refund-search" class="form-control" placeholder="🔍 Search refunds…" style="width:220px;">
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <input type="text" id="refund-search" class="form-control" placeholder="🔍 Search…" style="width:190px;">
+        <button class="btn btn-primary btn-sm" onclick="openRequestModal()">+ New Refund</button>
     </div>
 </header>
 
-<div class="table-container" style="overflow-x:auto;">
-    <table style="min-width:580px;">
+<div class="table-container">
+    <table>
         <thead>
             <tr>
                 <th>Date</th>
-                <th>Sale ID</th>
-                <th>Product Refunded</th>
-                <th>Quantity</th>
+                <th>Sale</th>
+                <th>Customer</th>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Value</th>
                 <th>Reason</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="refunds-tbody">
-            <tr><td colspan="7" class="text-center">Loading refunds...</td></tr>
+            <tr><td colspan="9" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading…</td></tr>
         </tbody>
     </table>
 </div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', loadRefunds);
+<!-- Request Refund Modal -->
+<div id="req-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Request Refund</h2>
+            <button class="close-modal" onclick="closeRequestModal()">&times;</button>
+        </div>
+        <div class="form-group">
+            <label>Sale ID *</label>
+            <div style="display:flex; gap:0.5rem;">
+                <input type="number" id="r-sale-id" class="form-control" placeholder="e.g. 42">
+                <button class="btn btn-secondary btn-sm" onclick="lookupSale()">Lookup</button>
+            </div>
+        </div>
+        <div id="r-sale-info" style="display:none; padding:0.75rem; background:var(--bg-elevated); border-radius:var(--radius-sm); margin-bottom:0.75rem; font-size:0.85rem;"></div>
+        <div id="r-items-list" style="display:none;">
+            <label style="font-weight:600; display:block; margin-bottom:0.5rem;">Items to refund</label>
+            <div id="r-items-container" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+        </div>
+        <div class="form-group" style="margin-top:0.75rem;">
+            <label>Reason</label>
+            <textarea id="r-reason" class="form-control" rows="2" placeholder="Damaged, wrong item, customer changed mind…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="submitRefund()">Submit Refund Request</button>
+        <p id="r-msg" style="font-size:0.85rem; min-height:1.2em; margin-top:0.5rem;"></p>
+    </div>
+</div>
 
-    async function loadRefunds() {
+<!-- Approve Modal -->
+<div id="approve-modal" class="modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Approve Refund</h2>
+            <button class="close-modal" onclick="closeApproveModal()">&times;</button>
+        </div>
+        <p id="approve-detail" style="margin-bottom:1rem; color:var(--text-muted); font-size:0.88rem;"></p>
+        <label style="display:block; margin-bottom:0.5rem; font-weight:600;">What should happen to the stock?</label>
+        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-bottom:1rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; padding:0.6rem; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); cursor:pointer;">
+                <input type="radio" name="approve-action" value="restock" checked>
+                <span><strong>Restock</strong> — returned to sellable inventory</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.5rem; padding:0.6rem; border:1px solid var(--border-subtle); border-radius:var(--radius-sm); cursor:pointer;">
+                <input type="radio" name="approve-action" value="damaged">
+                <span><strong>Write off as damaged</strong> — moved to damaged pile</span>
+            </label>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="confirmApprove()">Confirm Approval</button>
+        <p id="approve-msg" style="font-size:0.85rem; min-height:1.2em; margin-top:0.5rem;"></p>
+    </div>
+</div>
+
+<script>
+let currentRefundId = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadRefunds();
+    document.getElementById('refund-search').addEventListener('input', filterTable);
+});
+
+async function loadRefunds() {
+    const tbody = document.getElementById('refunds-tbody');
+    try {
         const res = await fetch('/refunds');
         const refunds = await res.json();
-        const tbody = document.getElementById('refunds-tbody');
 
-        if (refunds.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center">No refund records found.</td></tr>';
+        if (!refunds.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center" style="padding:2rem; color:var(--text-muted);">No refund records found.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = refunds.map(r => `
+        tbody.innerHTML = refunds.map(r => {
+            const sc = r.status === 'Approved' ? 'badge-success'
+                     : r.status === 'Rejected' ? 'badge-danger' : 'badge-warning';
+            const value = (r.unit_price || 0) * r.quantity;
+            const actions = r.status === 'Pending' ? `
+                <button class="btn btn-success btn-sm" onclick="openApprove(${r.id}, '${escHtml(r.product_name)}', ${r.quantity})">✓ Approve</button>
+                <button class="btn btn-secondary btn-sm" onclick="rejectRefund(${r.id})">✗ Reject</button>
+            ` : '—';
+            return `
             <tr>
-                <td>${new Date(r.created_at).toLocaleDateString()}</td>
+                <td style="white-space:nowrap; font-size:0.8rem;">${new Date(r.created_at).toLocaleDateString()}</td>
                 <td>#${r.sale_id}</td>
-                <td><strong>${r.product_name}</strong></td>
+                <td>${escHtml(r.customer_name)}</td>
+                <td><strong>${escHtml(r.product_name)}</strong></td>
                 <td>${r.quantity}</td>
-                <td><small>${r.reason || 'N/A'}</small></td>
-                <td><span class="badge ${r.status === 'Approved' ? 'badge-success' : 'badge-warning'}">${r.status}</span></td>
-                <td>
-                    <button class="btn btn-secondary btn-sm" onclick="alert('Module under development.')">View Details</button>
-                    ${r.status === 'Pending' ? `<button class="btn btn-success btn-sm">Approve</button>` : ''}
-                </td>
-            </tr>
-        `).join('');
+                <td>$${value.toFixed(2)}</td>
+                <td style="color:var(--text-muted); font-size:0.82rem; max-width:150px;"><small>${escHtml(r.reason || '—')}</small></td>
+                <td><span class="badge ${sc}">${r.status}</span></td>
+                <td style="white-space:nowrap;">${actions}</td>
+            </tr>`;
+        }).join('');
+    } catch {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-danger">Error loading refunds</td></tr>';
     }
+}
 
-    document.getElementById('refund-search').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll('#refunds-tbody tr');
-        rows.forEach(row => {
-            row.style.display = row.innerText.toLowerCase().includes(term) ? '' : 'none';
-        });
+function filterTable() {
+    const term = document.getElementById('refund-search').value.toLowerCase();
+    document.querySelectorAll('#refunds-tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
     });
+}
+
+/* ── Request ───────────────────────────────────────────────────────── */
+function openRequestModal() {
+    document.getElementById('r-sale-id').value = '';
+    document.getElementById('r-reason').value = '';
+    document.getElementById('r-msg').textContent = '';
+    document.getElementById('r-sale-info').style.display = 'none';
+    document.getElementById('r-items-list').style.display = 'none';
+    document.getElementById('r-items-container').innerHTML = '';
+    document.getElementById('req-modal').classList.add('active');
+}
+
+function closeRequestModal() { document.getElementById('req-modal').classList.remove('active'); }
+
+async function lookupSale() {
+    const id = document.getElementById('r-sale-id').value.trim();
+    if (!id) return;
+    const msg = document.getElementById('r-msg');
+    msg.textContent = 'Loading…';
+    try {
+        const res = await fetch(`/sales/${id}/refundable-items`);
+        if (!res.ok) { msg.textContent = 'Sale not found'; return; }
+        const data = await res.json();
+        msg.textContent = '';
+
+        document.getElementById('r-sale-info').style.display = 'block';
+        document.getElementById('r-sale-info').innerHTML =
+            `<strong>Sale #${data.sale_id}</strong> — ${escHtml(data.customer_name)} · ${new Date(data.sale_date).toLocaleDateString()}`;
+
+        if (!data.items.length) {
+            document.getElementById('r-items-list').style.display = 'none';
+            msg.textContent = 'No items available to refund on this sale.';
+            return;
+        }
+
+        document.getElementById('r-items-list').style.display = 'block';
+        document.getElementById('r-items-container').innerHTML = data.items.map(i => `
+            <div style="display:grid; grid-template-columns:1fr auto auto; gap:0.5rem; align-items:center;
+                        padding:0.5rem; border:1px solid var(--border-subtle); border-radius:var(--radius-sm);">
+                <div>
+                    <strong>${escHtml(i.product_name)}</strong>
+                    <div style="font-size:0.78rem; color:var(--text-muted);">
+                        Up to ${i.refundable_quantity} of ${i.sold_quantity} refundable · $${i.price_at_sale.toFixed(2)} ea
+                    </div>
+                </div>
+                <input type="number" class="form-control r-qty"
+                       data-pid="${i.product_id}" data-max="${i.refundable_quantity}"
+                       placeholder="Qty" min="0" max="${i.refundable_quantity}"
+                       style="width:80px;">
+                <span style="color:var(--text-muted); font-size:0.8rem;">/${i.refundable_quantity}</span>
+            </div>
+        `).join('');
+    } catch { msg.textContent = 'Network error'; }
+}
+
+async function submitRefund() {
+    const saleId = parseInt(document.getElementById('r-sale-id').value);
+    const reason = document.getElementById('r-reason').value.trim();
+    const msg = document.getElementById('r-msg');
+
+    const toSubmit = [];
+    document.querySelectorAll('.r-qty').forEach(inp => {
+        const qty = parseInt(inp.value);
+        const max = parseInt(inp.dataset.max);
+        if (qty > 0 && qty <= max) {
+            toSubmit.push({ product_id: parseInt(inp.dataset.pid), quantity: qty });
+        }
+    });
+
+    if (!toSubmit.length) { msg.textContent = 'Enter at least one quantity'; return; }
+
+    msg.textContent = 'Submitting…';
+    try {
+        for (const item of toSubmit) {
+            const res = await fetch('/refunds/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sale_id: saleId,
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    reason,
+                }),
+            });
+            if (!res.ok) {
+                const d = await res.json();
+                throw new Error(d.error || 'Failed');
+            }
+        }
+        window.showToastNotification(`${toSubmit.length} refund request(s) submitted`);
+        closeRequestModal();
+        loadRefunds();
+    } catch (e) {
+        msg.textContent = e.message;
+    }
+}
+
+/* ── Approve / Reject ──────────────────────────────────────────────── */
+function openApprove(id, product, qty) {
+    currentRefundId = id;
+    document.getElementById('approve-detail').textContent =
+        `Approving refund for ${qty}× ${product}.`;
+    document.getElementById('approve-msg').textContent = '';
+    document.querySelector('input[name="approve-action"][value="restock"]').checked = true;
+    document.getElementById('approve-modal').classList.add('active');
+}
+
+function closeApproveModal() { document.getElementById('approve-modal').classList.remove('active'); }
+
+async function confirmApprove() {
+    const action = document.querySelector('input[name="approve-action"]:checked').value;
+    const msg = document.getElementById('approve-msg');
+    msg.textContent = 'Processing…';
+    try {
+        const res = await fetch(`/refunds/${currentRefundId}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+            window.showToastNotification(`Refund approved · $${(data.refund_value || 0).toFixed(2)} adjusted`);
+            closeApproveModal();
+            loadRefunds();
+        } else {
+            msg.textContent = data.error || 'Failed';
+        }
+    } catch { msg.textContent = 'Network error'; }
+}
+
+async function rejectRefund(id) {
+    if (!confirm('Reject this refund request?')) return;
+    const res = await fetch(`/refunds/${id}/reject`, { method: 'POST' });
+    const d   = await res.json();
+    if (res.ok) { window.showToastNotification('Refund rejected'); loadRefunds(); }
+    else window.showToastNotification(d.error || 'Failed', 'error');
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 {% endblock %}

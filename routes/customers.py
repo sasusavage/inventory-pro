@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, session
-from models import db, Customer, Sale
+from sqlalchemy.orm import joinedload
+from models import db, Customer, Sale, SaleItem, AppSetting, LoyaltyPoint
 from decorators import login_required
 
 customers_bp = Blueprint('customers', __name__)
@@ -102,6 +103,63 @@ def update_customer(customer_id):
     except Exception:
         db.session.rollback()
         return jsonify({'error': 'Failed to update customer'}), 500
+
+
+@customers_bp.route('/customers/<int:customer_id>/statement', methods=['GET'])
+@login_required
+def customer_statement(customer_id):
+    """Printable statement of account for a customer."""
+    customer = Customer.query.get_or_404(customer_id)
+
+    date_from = request.args.get('from', '').strip()
+    date_to   = request.args.get('to', '').strip()
+
+    query = Sale.query.filter_by(customer_id=customer_id).options(
+        joinedload(Sale.items).joinedload(SaleItem.product),
+    )
+    if date_from:
+        try:
+            from datetime import datetime
+            query = query.filter(Sale.sale_date >= datetime.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime
+            query = query.filter(Sale.sale_date <= datetime.fromisoformat(date_to + 'T23:59:59'))
+        except ValueError:
+            pass
+
+    sales = query.order_by(Sale.sale_date.desc()).all()
+
+    total_sales    = sum(s.total_amount for s in sales)
+    total_paid     = sum(s.amount_paid for s in sales)
+    total_balance  = sum(s.balance_due for s in sales)
+
+    try:
+        loyalty_balance = LoyaltyPoint.balance(customer_id)
+    except Exception:
+        loyalty_balance = 0
+
+    store_name = AppSetting.get('store_name', 'InventoryPro')
+    currency = AppSetting.get('store_currency') or AppSetting.get('currency', '$')
+    store_address = AppSetting.get('store_address', '')
+    store_phone = AppSetting.get('store_phone', '')
+
+    return render_template(
+        'customer_statement.html',
+        customer=customer,
+        sales=sales,
+        total_sales=total_sales,
+        total_paid=total_paid,
+        total_balance=total_balance,
+        loyalty_balance=loyalty_balance,
+        date_from=date_from, date_to=date_to,
+        store_name=store_name,
+        currency=currency,
+        store_address=store_address,
+        store_phone=store_phone,
+    )
 
 
 @customers_bp.route('/customers/<int:customer_id>/outstanding-sales', methods=['GET'])

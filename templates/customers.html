@@ -133,7 +133,10 @@ async function loadCustomers(page = 1) {
                 <td style="color:var(--text-muted); font-size:0.82rem;">${escHtml(c.email || '—')}</td>
                 <td>${debtCell}</td>
                 <td style="color:var(--text-muted); font-size:0.8rem; white-space:nowrap;">${new Date(c.created_at).toLocaleDateString()}</td>
-                <td><button class="btn btn-secondary btn-sm" onclick='openEditModal(${JSON.stringify(c)})'>Edit</button></td>
+                <td style="white-space:nowrap;">
+                    <button class="btn btn-secondary btn-sm" onclick='openEditModal(${JSON.stringify(c)})'>Edit</button>
+                    <a href="/customers/${c.id}/statement" target="_blank" class="btn btn-secondary btn-sm" title="Statement of Account">📄</a>
+                </td>
             </tr>`;
         }).join('');
     } catch {

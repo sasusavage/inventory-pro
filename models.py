@@ -89,9 +89,14 @@ class PurchaseOrderItem(db.Model):
     purchase_order_id = db.Column(db.Integer, db.ForeignKey('purchase_orders.id'), nullable=False, index=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, index=True)
     quantity = db.Column(db.Integer, nullable=False)
+    quantity_received = db.Column(db.Integer, default=0)
     unit_cost = db.Column(db.Float, nullable=False)
 
     product = db.relationship('Product')
+
+    @property
+    def quantity_pending(self):
+        return max(0, (self.quantity or 0) - (self.quantity_received or 0))
 
 
 class StockMovement(db.Model):
@@ -224,6 +229,43 @@ class Expense(db.Model):
     note = db.Column(db.Text, nullable=True)
     expense_date = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ActivityLog(db.Model):
+    """Audit trail of user actions across the system."""
+    __tablename__ = 'activity_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, index=True)
+    username = db.Column(db.String(80), nullable=True)
+    action = db.Column(db.String(60), nullable=False, index=True)  # CREATE_SALE, DELETE_PRODUCT, etc.
+    entity = db.Column(db.String(40), nullable=True)  # sale, product, customer...
+    entity_id = db.Column(db.Integer, nullable=True)
+    summary = db.Column(db.String(255), nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User')
+
+    @classmethod
+    def log(cls, action, entity=None, entity_id=None, summary=None):
+        """Record an action. Safe to call anywhere — errors are swallowed."""
+        try:
+            from flask import session, request, has_request_context
+            user_id = session.get('user_id') if has_request_context() else None
+            username = session.get('username') if has_request_context() else None
+            ip = request.remote_addr if has_request_context() else None
+            log = cls(
+                user_id=user_id,
+                username=username,
+                action=action,
+                entity=entity,
+                entity_id=entity_id,
+                summary=(summary or '')[:255] or None,
+                ip_address=ip,
+            )
+            db.session.add(log)
+        except Exception:
+            pass
 
 
 class StockAdjustment(db.Model):

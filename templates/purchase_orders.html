@@ -7,6 +7,7 @@
     <h2 class="page-title">Purchase Orders</h2>
     <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
         <input type="text" id="po-search" class="form-control" placeholder="🔍 Search…" style="width:190px;">
+        <button class="btn btn-warning btn-sm" onclick="openReorderModal()">🔁 Reorder Low Stock</button>
         <button class="btn btn-primary btn-sm" onclick="openPOModal()">+ New Order</button>
     </div>
 </header>
@@ -34,6 +35,25 @@
     <button id="prev-btn" onclick="changePage(-1)" disabled>← Prev</button>
     <span id="page-info" style="font-size:0.82rem; color:var(--text-muted); padding:0 0.5rem;"></span>
     <button id="next-btn" onclick="changePage(1)">Next →</button>
+</div>
+
+<!-- Receive PO Modal (partial receive) -->
+<div id="recv-modal" class="modal">
+    <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">📥 Receive Order</h2>
+            <button class="close-modal" onclick="closeReceiveModal()">&times;</button>
+        </div>
+        <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:0.75rem;">
+            <span id="recv-po-summary"></span>
+        </p>
+        <div id="recv-items" style="display:flex; flex-direction:column; gap:0.5rem; max-height:50vh; overflow-y:auto; margin-bottom:0.75rem;"></div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-block" onclick="submitReceive(false)">Receive Selected Quantities</button>
+            <button class="btn btn-secondary btn-block" onclick="submitReceive(true)">Receive All Pending</button>
+        </div>
+        <p id="recv-msg" style="font-size:0.85rem; min-height:1.2em; margin-top:0.5rem;"></p>
+    </div>
 </div>
 
 <!-- New PO Modal -->
@@ -73,6 +93,36 @@
     </div>
 </div>
 
+<!-- Reorder Suggestions Modal -->
+<div id="reorder-modal" class="modal">
+    <div class="modal-content" style="max-width:680px;">
+        <div class="modal-header">
+            <h2 style="font-size:1.1rem;font-weight:700;margin:0;">🔁 Reorder Low-Stock Items</h2>
+            <button class="close-modal" onclick="closeReorderModal()">&times;</button>
+        </div>
+        <div class="form-group">
+            <label>Supplier *</label>
+            <select id="reorder-supplier" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+            <label>Payment Method</label>
+            <select id="reorder-pay-type" class="form-control">
+                <option value="Credit">Credit (Pay Later)</option>
+                <option value="Cash">Cash (Paid Immediately)</option>
+            </select>
+        </div>
+        <p style="color:var(--text-muted); font-size:0.82rem; margin:0.5rem 0;">
+            Uncheck items you don't want to include. Quantities default to restock the shelf to 2× min stock level.
+        </p>
+        <div id="reorder-list" style="display:flex; flex-direction:column; gap:0.4rem; max-height:45vh; overflow-y:auto; margin-bottom:0.75rem;"></div>
+        <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.5rem;">
+            Estimated Total: <span id="reorder-total" class="text-success">$0.00</span>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="submitReorder()">Create Draft Purchase Order</button>
+        <p id="reorder-msg" style="font-size:0.85rem; min-height:1.2em; margin-top:0.5rem;"></p>
+    </div>
+</div>
+
 <script>
 let currentPage = 1, totalPages = 1;
 let suppliersCache = [], productsCache = [];
@@ -104,17 +154,25 @@ async function loadPOs(page = 1) {
 
         tbody.innerHTML = data.map(po => {
             const sc = po.status === 'Received' ? 'badge-success'
+                     : po.status === 'Partial'  ? 'badge-primary'
                      : po.status === 'Cancelled' ? 'badge-danger' : 'badge-warning';
             const pc = po.payment_type === 'Cash' ? 'badge-primary' : 'badge-secondary';
-            const actions = po.status === 'Pending' ? `
-                <button class="btn btn-primary btn-sm" onclick="receivePO(${po.id})">✓ Receive</button>
-                <button class="btn btn-secondary btn-sm" onclick="cancelPO(${po.id})">✗ Cancel</button>
+            const canReceive = po.status === 'Pending' || po.status === 'Partial';
+            const actions = canReceive ? `
+                <button class="btn btn-primary btn-sm" onclick='openReceiveModal(${JSON.stringify(po)})'>📥 Receive</button>
+                ${po.status === 'Pending' ? `<button class="btn btn-secondary btn-sm" onclick="cancelPO(${po.id})">✗ Cancel</button>` : ''}
             ` : '—';
+            const itemsProgress = (po.items || []).map(it =>
+                `${escHtml(it.product_name)}: ${it.quantity_received}/${it.quantity}`
+            ).join(' · ');
             return `
             <tr>
                 <td style="white-space:nowrap; font-size:0.8rem;">${new Date(po.date).toLocaleDateString()}</td>
                 <td><strong>${escHtml(po.supplier)}</strong></td>
-                <td style="color:var(--text-muted); font-size:0.82rem;">${po.items_count} item${po.items_count !== 1 ? 's' : ''}</td>
+                <td style="color:var(--text-muted); font-size:0.78rem; max-width:200px;">
+                    <div>${po.items_count} item${po.items_count !== 1 ? 's' : ''}</div>
+                    <div style="font-size:0.72rem;">${itemsProgress}</div>
+                </td>
                 <td style="font-weight:600;">$${(po.total || 0).toFixed(2)}</td>
                 <td><span class="badge ${pc}">${escHtml(po.payment_type)}</span></td>
                 <td><span class="badge ${sc}">${escHtml(po.status)}</span></td>
@@ -254,12 +312,72 @@ async function submitPO(e) {
     } catch { window.showToastNotification('Network error', 'error'); }
 }
 
-async function receivePO(id) {
-    if (!confirm('Mark this order as received? Stock will be updated.')) return;
-    const res = await fetch(`/purchase-orders/${id}/receive`, { method: 'POST' });
-    const d   = await res.json();
-    if (res.ok) { window.showToastNotification('Stock updated!'); loadPOs(currentPage); }
-    else window.showToastNotification(d.error || 'Failed', 'error');
+let currentReceivePO = null;
+
+function openReceiveModal(po) {
+    currentReceivePO = po;
+    document.getElementById('recv-po-summary').innerHTML =
+        `<strong>PO #${po.id}</strong> from ${escHtml(po.supplier)} · Total $${po.total.toFixed(2)}`;
+    document.getElementById('recv-msg').textContent = '';
+
+    const items = po.items || [];
+    document.getElementById('recv-items').innerHTML = items.map(it => {
+        const pending = it.quantity_pending;
+        const done    = pending <= 0;
+        return `
+        <div style="padding:0.6rem; border:1px solid var(--border-subtle); border-radius:var(--radius-sm);
+                    ${done ? 'opacity:0.5;' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <div>
+                    <strong>${escHtml(it.product_name)}</strong>
+                    <div style="font-size:0.78rem; color:var(--text-muted);">
+                        Ordered ${it.quantity} · Received ${it.quantity_received} · Pending <strong>${pending}</strong>
+                    </div>
+                </div>
+                <input type="number" class="form-control recv-qty"
+                       data-item-id="${it.id}" data-pending="${pending}"
+                       min="0" max="${pending}" value="${pending}"
+                       ${done ? 'disabled' : ''}
+                       style="width:100px;">
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('recv-modal').classList.add('active');
+}
+
+function closeReceiveModal() { document.getElementById('recv-modal').classList.remove('active'); }
+
+async function submitReceive(receiveAll) {
+    const msg = document.getElementById('recv-msg');
+    msg.textContent = 'Processing…';
+
+    let body = {};
+    if (!receiveAll) {
+        const receipts = [];
+        document.querySelectorAll('.recv-qty').forEach(inp => {
+            const q = parseInt(inp.value) || 0;
+            if (q > 0) receipts.push({ item_id: parseInt(inp.dataset.itemId), quantity: q });
+        });
+        if (!receipts.length) { msg.textContent = 'Enter at least one quantity'; return; }
+        body = { receipts };
+    }
+
+    try {
+        const res = await fetch(`/purchase-orders/${currentReceivePO.id}/receive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const d = await res.json();
+        if (res.ok) {
+            window.showToastNotification(d.message || 'Received!');
+            closeReceiveModal();
+            loadPOs(currentPage);
+        } else {
+            msg.textContent = d.error || 'Failed';
+        }
+    } catch { msg.textContent = 'Network error'; }
 }
 
 async function cancelPO(id) {
@@ -272,6 +390,92 @@ async function cancelPO(id) {
 
 function escHtml(str) {
     return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Reorder Automation ─────────────────────────────────────────────── */
+async function openReorderModal() {
+    const msg = document.getElementById('reorder-msg');
+    msg.textContent = '';
+    document.getElementById('reorder-modal').classList.add('active');
+
+    const supSel = document.getElementById('reorder-supplier');
+    supSel.innerHTML = suppliersCache.map(s => `<option value="${s.id}">${escHtml(s.name)}</option>`).join('')
+                        || '<option value="">No suppliers — add one first</option>';
+
+    const listEl = document.getElementById('reorder-list');
+    listEl.innerHTML = '<p style="color:var(--text-muted);padding:0.5rem;">Loading low-stock items…</p>';
+
+    try {
+        const json = await fetch('/reorder/suggestions').then(r => r.json());
+        const items = json.products || [];
+        if (!items.length) {
+            listEl.innerHTML = '<p class="text-success" style="padding:0.5rem;">🎉 No items at or below min stock level.</p>';
+            document.getElementById('reorder-total').textContent = '$0.00';
+            return;
+        }
+        listEl.innerHTML = items.map(i => `
+            <label style="display:flex; gap:0.5rem; align-items:center; background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:0.5rem;">
+                <input type="checkbox" class="reorder-chk" data-cost="${i.unit_cost}" checked data-pid="${i.product_id}">
+                <div style="flex:1;">
+                    <div style="font-weight:600; font-size:0.9rem;">${escHtml(i.name)}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">SKU ${escHtml(i.sku)} · in stock ${i.current_stock} · min ${i.min_stock_level}</div>
+                </div>
+                <input type="number" class="form-control reorder-qty" min="1" value="${i.suggested_quantity}" style="width:80px;">
+                <span style="font-size:0.78rem; color:var(--text-muted); min-width:60px; text-align:right;">@ $${(i.unit_cost || 0).toFixed(2)}</span>
+            </label>
+        `).join('');
+        updateReorderTotal();
+        listEl.querySelectorAll('.reorder-chk, .reorder-qty').forEach(el => el.addEventListener('input', updateReorderTotal));
+    } catch {
+        listEl.innerHTML = '<p class="text-danger" style="padding:0.5rem;">Failed to load suggestions.</p>';
+    }
+}
+
+function updateReorderTotal() {
+    let total = 0;
+    document.querySelectorAll('#reorder-list label').forEach(row => {
+        const chk = row.querySelector('.reorder-chk');
+        const qty = parseInt(row.querySelector('.reorder-qty').value) || 0;
+        const cost = parseFloat(chk.dataset.cost) || 0;
+        if (chk.checked) total += cost * qty;
+    });
+    document.getElementById('reorder-total').textContent = '$' + total.toFixed(2);
+}
+
+function closeReorderModal() { document.getElementById('reorder-modal').classList.remove('active'); }
+
+async function submitReorder() {
+    const supplier_id = parseInt(document.getElementById('reorder-supplier').value);
+    const payment_type = document.getElementById('reorder-pay-type').value;
+    const msg = document.getElementById('reorder-msg');
+
+    if (!supplier_id) { msg.textContent = 'Please select a supplier.'; return; }
+
+    const product_ids = [];
+    document.querySelectorAll('#reorder-list label').forEach(row => {
+        const chk = row.querySelector('.reorder-chk');
+        if (chk.checked) product_ids.push(parseInt(chk.dataset.pid));
+    });
+    if (!product_ids.length) { msg.textContent = 'Select at least one item.'; return; }
+
+    msg.textContent = 'Creating draft PO…';
+    try {
+        const res = await fetch('/reorder/auto-draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ supplier_id, payment_type, product_ids }),
+        });
+        const d = await res.json();
+        if (res.ok) {
+            window.showToastNotification(`Draft PO #${d.id} created`);
+            closeReorderModal();
+            loadPOs(1);
+        } else {
+            msg.textContent = d.error || 'Failed to create draft.';
+        }
+    } catch {
+        msg.textContent = 'Network error.';
+    }
 }
 </script>
 {% endblock %}

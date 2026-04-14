@@ -25,6 +25,17 @@ def _run_migrations(flask_app):
             )
             db.session.commit()
 
+        # purchase_order_items.quantity_received (added for partial PO receiving)
+        try:
+            poi_cols = [c['name'] for c in inspector.get_columns('purchase_order_items')]
+            if 'quantity_received' not in poi_cols:
+                db.session.execute(
+                    text('ALTER TABLE purchase_order_items ADD COLUMN quantity_received INTEGER DEFAULT 0')
+                )
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+
         # Any future safe ALTER TABLE migrations go here (add columns only — never drop)
 
 

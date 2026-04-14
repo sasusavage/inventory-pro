@@ -24,14 +24,16 @@
                 <th>Image</th>
                 <th>Name</th>
                 <th>SKU</th>
+                <th>Cost</th>
                 <th>Price</th>
+                <th>Margin</th>
                 <th>Stock</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody id="product-list">
-            <tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
+            <tr><td colspan="10" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
         </tbody>
     </table>
 </div>
@@ -128,7 +130,7 @@ async function loadProducts(search = '', page = currentPage) {
 function renderProducts(data) {
     const list = document.getElementById('product-list');
     if (!data.length) {
-        list.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem; color:var(--text-muted);">No products found</td></tr>';
+        list.innerHTML = '<tr><td colspan="10" class="text-center" style="padding:2rem; color:var(--text-muted);">No products found</td></tr>';
         return;
     }
     list.innerHTML = data.map(p => {
@@ -141,17 +143,27 @@ function renderProducts(data) {
         const badge = oos ? '<span class="badge badge-danger">Out of Stock</span>'
                      : low ? '<span class="badge badge-warning">Low Stock</span>'
                      : '<span class="badge badge-success">In Stock</span>';
+
+        const cost = parseFloat(p.cost_price) || 0;
+        const price = parseFloat(p.selling_price) || 0;
+        const margin = price > 0 ? ((price - cost) / price) * 100 : 0;
+        const marginClass = margin >= 30 ? 'text-success' : margin >= 15 ? '' : 'text-danger';
+        const marginCell = `<strong class="${marginClass}">${margin.toFixed(0)}%</strong>`;
+
         return `
             <tr>
                 <td><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
                 <td>${imgTag}</td>
                 <td style="font-weight:600;">${p.name}</td>
                 <td style="color:var(--text-muted); font-family:monospace;">${p.sku}</td>
-                <td>$${parseFloat(p.selling_price).toFixed(2)}</td>
+                <td style="color:var(--text-muted);">$${cost.toFixed(2)}</td>
+                <td>$${price.toFixed(2)}</td>
+                <td>${marginCell}</td>
                 <td>${p.quantity_in_stock}</td>
                 <td>${badge}</td>
-                <td>
+                <td style="white-space:nowrap;">
                     <button class="btn btn-secondary btn-sm" onclick='openEditModal(${JSON.stringify(p)})'>Edit</button>
+                    <a href="/products/${p.id}/label" target="_blank" class="btn btn-secondary btn-sm">🏷️</a>
                 </td>
             </tr>`;
     }).join('');

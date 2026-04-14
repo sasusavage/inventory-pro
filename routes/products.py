@@ -1,7 +1,7 @@
 import os
 from flask import Blueprint, render_template, request, jsonify, session, current_app
 from werkzeug.utils import secure_filename
-from models import db, Product
+from models import db, Product, ActivityLog
 from decorators import login_required
 from utils import allowed_file, log_stock_movement, MAX_FILE_SIZE
 
@@ -97,6 +97,8 @@ def create_product():
         if product.quantity_in_stock > 0:
             log_stock_movement(product.id, product.quantity_in_stock, 'Initial Stock')
 
+        ActivityLog.log('CREATE_PRODUCT', entity='product', entity_id=product.id,
+                        summary=f'{product.name} (SKU {product.sku}) qty {product.quantity_in_stock}')
         db.session.commit()
         from routes.dashboard import invalidate_stats_cache
         invalidate_stats_cache()
@@ -151,7 +153,11 @@ def delete_product(product_id):
 
     product = Product.query.get_or_404(product_id)
     try:
+        name_snapshot = product.name
+        sku_snapshot = product.sku
         db.session.delete(product)
+        ActivityLog.log('DELETE_PRODUCT', entity='product', entity_id=product_id,
+                        summary=f'{name_snapshot} (SKU {sku_snapshot})')
         db.session.commit()
         from routes.dashboard import invalidate_stats_cache
         invalidate_stats_cache()
@@ -237,3 +243,64 @@ def bulk_products():
 def check_product(sku):
     product = Product.query.filter_by(sku=sku).first()
     return jsonify({'exists': product is not None})
+
+
+@products_bp.route('/products/<int:product_id>/label')
+@login_required
+def product_label(product_id):
+    """Printable barcode label for a product."""
+    from models import AppSetting
+    product = Product.query.get_or_404(product_id)
+    store_name = AppSetting.get('store_name', 'InventoryPro')
+    currency = AppSetting.get('store_currency') or AppSetting.get('currency', '$')
+    return render_template(
+        'product_label.html',
+        product=product,
+        store_name=store_name,
+        currency=currency,
+    )
+
+
+@products_bp.route('/products/top-profit', methods=['GET'])
+@login_required
+def top_profit_products():
+    """Top products by total gross profit over the selected window (default 30d)."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from models import SaleItem, Sale
+
+    days = min(int(request.args.get('days', 30) or 30), 365)
+    since = datetime.utcnow() - timedelta(days=days)
+
+    rows = (
+        db.session.query(
+            SaleItem.product_id,
+            func.sum(SaleItem.quantity).label('units_sold'),
+            func.sum(SaleItem.subtotal).label('revenue'),
+            func.sum(SaleItem.subtotal - SaleItem.cost_price_at_sale * SaleItem.quantity).label('profit'),
+        )
+        .join(Sale, Sale.id == SaleItem.sale_id)
+        .filter(Sale.sale_date >= since, SaleItem.status == 'Active')
+        .group_by(SaleItem.product_id)
+        .order_by(func.sum(SaleItem.subtotal - SaleItem.cost_price_at_sale * SaleItem.quantity).desc())
+        .limit(20)
+        .all()
+    )
+
+    results = []
+    for r in rows:
+        product = Product.query.get(r.product_id)
+        if not product:
+            continue
+        rev = float(r.revenue or 0)
+        profit = float(r.profit or 0)
+        results.append({
+            'product_id': product.id,
+            'name': product.name,
+            'sku': product.sku,
+            'units_sold': int(r.units_sold or 0),
+            'revenue': rev,
+            'profit': profit,
+            'margin_percent': round((profit / rev) * 100, 1) if rev > 0 else 0,
+        })
+    return jsonify({'days': days, 'products': results})

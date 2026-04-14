@@ -1,0 +1,128 @@
+{% extends "layout.html" %}
+{% block title %}Activity Log - InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">📜 Activity Log</h2>
+    <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+        <input type="text" id="f-user" class="form-control" placeholder="👤 User..." style="width:140px;">
+        <input type="text" id="f-action" class="form-control" placeholder="⚙ Action..." style="width:140px;">
+        <select id="f-entity" class="form-control" style="width:140px;">
+            <option value="">All entities</option>
+            <option value="product">Product</option>
+            <option value="sale">Sale</option>
+            <option value="customer">Customer</option>
+            <option value="supplier">Supplier</option>
+            <option value="purchase_order">Purchase Order</option>
+            <option value="refund">Refund</option>
+            <option value="user">User</option>
+            <option value="setting">Setting</option>
+            <option value="expense">Expense</option>
+            <option value="category">Category</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="loadActivity(1)">Filter</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+    </div>
+</header>
+
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:760px;">
+        <thead>
+            <tr>
+                <th>When</th>
+                <th>User</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Details</th>
+                <th>IP</th>
+            </tr>
+        </thead>
+        <tbody id="act-tbody">
+            <tr><td colspan="6" class="text-center" style="padding:2rem; color:var(--text-muted);">Loading...</td></tr>
+        </tbody>
+    </table>
+</div>
+<div id="act-pagination" class="pagination"></div>
+
+<script>
+let currentPage = 1;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadActivity(1);
+    ['f-user','f-action','f-entity'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') loadActivity(1); });
+    });
+});
+
+function clearFilters() {
+    document.getElementById('f-user').value = '';
+    document.getElementById('f-action').value = '';
+    document.getElementById('f-entity').value = '';
+    loadActivity(1);
+}
+
+async function loadActivity(page = 1) {
+    currentPage = page;
+    const params = new URLSearchParams({ page, per_page: 50 });
+    const u = document.getElementById('f-user').value.trim();
+    const a = document.getElementById('f-action').value.trim();
+    const e = document.getElementById('f-entity').value;
+    if (u) params.set('username', u);
+    if (a) params.set('action', a);
+    if (e) params.set('entity', e);
+
+    const tbody = document.getElementById('act-tbody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:1.5rem; color:var(--text-muted);">Loading...</td></tr>';
+
+    try {
+        const json = await fetch(`/activity?${params}`).then(r => r.json());
+        const rows = json.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:2rem; color:var(--text-muted);">No activity found.</td></tr>';
+            document.getElementById('act-pagination').innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const when = new Date(r.created_at);
+            const whenTxt = when.toLocaleString();
+            const badge = actionBadge(r.action);
+            return `
+            <tr>
+                <td style="font-size:0.78rem; color:var(--text-muted); white-space:nowrap;">${whenTxt}</td>
+                <td><strong>${esc(r.username)}</strong></td>
+                <td>${badge}</td>
+                <td style="font-size:0.82rem; color:var(--text-muted);">${esc(r.entity || '—')}${r.entity_id ? ' #' + r.entity_id : ''}</td>
+                <td style="font-size:0.82rem;">${esc(r.summary || '—')}</td>
+                <td style="font-family:monospace; font-size:0.75rem; color:var(--text-muted);">${esc(r.ip_address || '—')}</td>
+            </tr>`;
+        }).join('');
+        renderPagination(json.pagination || {});
+    } catch {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Failed to load activity.</td></tr>';
+    }
+}
+
+function actionBadge(action) {
+    const a = (action || '').toUpperCase();
+    let cls = 'badge-info';
+    if (a.startsWith('CREATE') || a.startsWith('ADD')) cls = 'badge-success';
+    else if (a.startsWith('DELETE') || a.startsWith('REMOVE')) cls = 'badge-danger';
+    else if (a.startsWith('UPDATE') || a.startsWith('EDIT')) cls = 'badge-warning';
+    else if (a.startsWith('LOGIN') || a.startsWith('LOGOUT')) cls = 'badge-info';
+    return `<span class="badge ${cls}">${esc(action)}</span>`;
+}
+
+function renderPagination(pg) {
+    const el = document.getElementById('act-pagination');
+    if (!pg.pages || pg.pages <= 1) { el.innerHTML = ''; return; }
+    let html = `<button ${pg.page <= 1 ? 'disabled' : ''} onclick="loadActivity(${pg.page - 1})">← Prev</button>`;
+    html += `<span style="padding:0 0.5rem; font-size:0.82rem; color:var(--text-muted);">Page ${pg.page} of ${pg.pages} (${pg.total} total)</span>`;
+    html += `<button ${pg.page >= pg.pages ? 'disabled' : ''} onclick="loadActivity(${pg.page + 1})">Next →</button>`;
+    el.innerHTML = html;
+}
+
+function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

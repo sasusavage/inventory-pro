@@ -39,6 +39,7 @@ def create_app(config=None):
     from routes.expenses import expenses_bp
     from routes.stock_adjustments import stock_adj_bp
     from routes.loyalty import loyalty_bp
+    from routes.activity import activity_bp
     from telegram_bot import bot_bp
 
     for bp in (
@@ -46,7 +47,7 @@ def create_app(config=None):
         customers_bp, suppliers_bp, purchase_orders_bp,
         refunds_bp, reports_bp, users_bp, settings_bp,
         ai_bp, analytics_bp, categories_bp, expenses_bp,
-        stock_adj_bp, loyalty_bp, bot_bp,
+        stock_adj_bp, loyalty_bp, activity_bp, bot_bp,
     ):
         app.register_blueprint(bp)
 
