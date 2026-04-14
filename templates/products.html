@@ -6,7 +6,7 @@
 <header class="page-header">
     <h2 class="page-title">Product Inventory</h2>
     <div style="display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
-        <input type="text" id="search-box" class="form-control" style="width:200px;" placeholder="🔍 Search products...">
+        <input type="text" id="search-box" class="form-control" style="flex:1; min-width:130px; max-width:220px;" placeholder="🔍 Search products...">
         <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
             <input type="number" id="bulk-price" class="form-control" placeholder="New price" step="0.01" style="width:110px;">
             <button id="bulk-price-btn" class="btn btn-secondary btn-sm">Set Price</button>
@@ -59,6 +59,10 @@
             <div class="grid-2-col">
                 <div class="form-group"><label>Stock Qty *</label><input type="number" id="p-stock" class="form-control" min="0" required></div>
                 <div class="form-group"><label>Min Stock Alert</label><input type="number" id="p-min" class="form-control" value="10" min="0"></div>
+            </div>
+            <div class="form-group">
+                <label>Barcode <span style="color:var(--text-muted);font-weight:400;text-transform:none;font-size:0.72rem;">— scan real barcode or leave blank to use SKU</span></label>
+                <input type="text" id="p-barcode" class="form-control" placeholder="e.g. 6901234567890">
             </div>
             <div class="form-group">
                 <label>Upload Image</label>
@@ -193,6 +197,7 @@ function openProductModal() {
     document.getElementById('modal-title').textContent = 'Add Product';
     document.getElementById('p-id').value = '';
     document.getElementById('product-form').reset();
+    document.getElementById('p-barcode').value = '';
     document.getElementById('product-modal').classList.add('active');
 }
 
@@ -205,6 +210,7 @@ function openEditModal(p) {
     document.getElementById('p-price').value = p.selling_price;
     document.getElementById('p-stock').value = p.quantity_in_stock;
     document.getElementById('p-min').value = p.min_stock_level;
+    document.getElementById('p-barcode').value = p.barcode || '';
     document.getElementById('p-url').value = p.image_url || '';
     document.getElementById('product-modal').classList.add('active');
 }
@@ -223,6 +229,7 @@ async function saveProduct(e) {
         selling_price: parseFloat(document.getElementById('p-price').value),
         quantity_in_stock: parseInt(document.getElementById('p-stock').value),
         min_stock_level: parseInt(document.getElementById('p-min').value),
+        barcode: document.getElementById('p-barcode').value.trim() || null,
         image_url: document.getElementById('p-url').value || null
     };
 

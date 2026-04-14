@@ -149,11 +149,43 @@
             <button class="btn btn-secondary btn-sm" onclick="clearCart()">Clear</button>
         </div>
 
-        <div class="form-group" style="flex-shrink:0; margin-bottom:0.75rem;">
+        <div class="form-group" style="flex-shrink:0; margin-bottom:0.75rem; position:relative;">
             <label style="font-size:0.8rem; font-weight:600;">Customer</label>
-            <select id="pos-customer" class="form-control">
-                <option value="">-- Select Customer --</option>
-            </select>
+            <div id="cust-selected" style="display:none; background:var(--bg-elevated); border:1px solid var(--accent-primary); border-radius:var(--radius-sm); padding:0.45rem 0.75rem; font-size:0.88rem; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+                <span id="cust-selected-name" style="font-weight:600; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+                <button type="button" onclick="clearCustomer()" style="background:none; border:none; cursor:pointer; color:#94a3b8; font-size:1rem; padding:0; flex-shrink:0;" title="Change customer">✕</button>
+            </div>
+            <div id="cust-search-wrapper">
+                <input type="text" id="pos-cust-search" class="form-control" placeholder="🔍 Search by name or phone…" autocomplete="off">
+                <div id="cust-dropdown" style="display:none; position:absolute; left:0; right:0; z-index:400; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:var(--radius-md); box-shadow:var(--shadow-card); max-height:260px; overflow-y:auto; margin-top:2px;"></div>
+            </div>
+            <input type="hidden" id="pos-customer" value="">
+        </div>
+
+        <!-- Quick Create Customer Modal -->
+        <div id="quick-cust-modal" class="modal">
+            <div class="modal-content" style="max-width:420px;">
+                <div class="modal-header">
+                    <h2 style="font-size:1.05rem; font-weight:700; margin:0;">➕ New Customer</h2>
+                    <button class="close-modal" onclick="closeQuickCust()">&times;</button>
+                </div>
+                <form id="quick-cust-form">
+                    <div class="form-group">
+                        <label>Full Name *</label>
+                        <input type="text" id="qc-name" class="form-control" required placeholder="e.g. John Doe">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone *</label>
+                        <input type="tel" id="qc-phone" class="form-control" required placeholder="e.g. 0712345678">
+                    </div>
+                    <div class="form-group">
+                        <label>Email (optional)</label>
+                        <input type="email" id="qc-email" class="form-control" placeholder="optional">
+                    </div>
+                    <p id="qc-msg" style="font-size:0.82rem; color:#dc2626; min-height:1em; margin-bottom:0.5rem;"></p>
+                    <button type="submit" class="btn btn-primary btn-block">Save & Select Customer</button>
+                </form>
+            </div>
         </div>
 
         <div id="pos-cart" class="pos-cart-items">
@@ -184,13 +216,13 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         await loadPOSProducts();
-        await loadPOSCustomers();
         loadCategories();
+        initCustomerSearch();
 
         document.getElementById('pos-search').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase().trim();
             const filtered = term
-                ? products.filter(p => p.name.toLowerCase().includes(term) || (p.sku||'').toLowerCase().includes(term))
+                ? products.filter(p => p.name.toLowerCase().includes(term) || (p.sku||'').toLowerCase().includes(term) || (p.barcode||'').toLowerCase().includes(term))
                 : products;
             renderPOSProducts(filtered);
         });
@@ -236,22 +268,122 @@
         }
     }
 
-    async function loadPOSCustomers() {
-        try {
-            const res = await fetch('/customers?per_page=500');
-            if (!res.ok) throw new Error('Failed');
-            const json = await res.json();
-            // API returns { data: [...], pagination: {...} }
-            const customers = Array.isArray(json) ? json : (json.data || []);
-            const select = document.getElementById('pos-customer');
-            customers.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = `${c.full_name}${c.phone ? ' (' + c.phone + ')' : ''}`;
-                select.appendChild(opt);
-            });
-        } catch (_) {}
+    /* ── Customer autocomplete ────────────────────────────────────────────── */
+    let custSearchTimer = null;
+
+    function initCustomerSearch() {
+        const input = document.getElementById('pos-cust-search');
+        input.addEventListener('input', () => {
+            clearTimeout(custSearchTimer);
+            custSearchTimer = setTimeout(() => searchCustomers(input.value.trim()), 220);
+        });
+        input.addEventListener('focus', () => {
+            if (!input.value.trim()) showCustDropdown([]);
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#cust-search-wrapper') && !e.target.closest('#cust-dropdown')) {
+                document.getElementById('cust-dropdown').style.display = 'none';
+            }
+        });
+        document.getElementById('quick-cust-form').addEventListener('submit', saveQuickCustomer);
     }
+
+    async function searchCustomers(q) {
+        const dd = document.getElementById('cust-dropdown');
+        try {
+            const params = new URLSearchParams({ per_page: 8 });
+            if (q) params.set('search', q);
+            const json = await fetch(`/customers?${params}`).then(r => r.json());
+            const list = Array.isArray(json) ? json : (json.data || []);
+            showCustDropdown(list, q);
+        } catch { dd.style.display = 'none'; }
+    }
+
+    function showCustDropdown(list, q = '') {
+        const dd = document.getElementById('cust-dropdown');
+        let html = '';
+        if (list.length) {
+            html += list.map(c => `
+                <div class="cust-opt" onclick="selectCustomer(${c.id}, '${esc(c.full_name)}', '${esc(c.phone||'')}')"
+                     style="padding:0.6rem 0.85rem; cursor:pointer; border-bottom:1px solid var(--border-subtle); font-size:0.88rem;">
+                    <strong>${esc(c.full_name)}</strong>
+                    <span style="color:var(--text-muted); font-size:0.78rem; margin-left:0.4rem;">${esc(c.phone||'')}</span>
+                </div>`).join('');
+        } else if (q) {
+            html += `<div style="padding:0.6rem 0.85rem; color:var(--text-muted); font-size:0.82rem;">No results for "${esc(q)}"</div>`;
+        }
+        html += `<div onclick="openQuickCust('${esc(q)}')"
+                     style="padding:0.65rem 0.85rem; cursor:pointer; color:var(--accent-primary); font-weight:600; font-size:0.85rem; display:flex; align-items:center; gap:0.4rem; background:var(--bg-elevated);">
+                    ➕ Create new customer${q ? ' "' + esc(q) + '"' : ''}
+                </div>`;
+        dd.innerHTML = html;
+        dd.style.display = 'block';
+
+        dd.querySelectorAll('.cust-opt').forEach(el => {
+            el.addEventListener('mouseover', () => el.style.background = 'var(--bg-elevated)');
+            el.addEventListener('mouseout', () => el.style.background = '');
+        });
+    }
+
+    function selectCustomer(id, name, phone) {
+        document.getElementById('pos-customer').value = id;
+        document.getElementById('cust-selected-name').textContent = `${name}${phone ? ' · ' + phone : ''}`;
+        document.getElementById('cust-selected').style.display = 'flex';
+        document.getElementById('cust-search-wrapper').style.display = 'none';
+        document.getElementById('cust-dropdown').style.display = 'none';
+    }
+
+    function clearCustomer() {
+        document.getElementById('pos-customer').value = '';
+        document.getElementById('cust-selected').style.display = 'none';
+        document.getElementById('cust-search-wrapper').style.display = '';
+        document.getElementById('pos-cust-search').value = '';
+        document.getElementById('pos-cust-search').focus();
+    }
+
+    function openQuickCust(prefillName = '') {
+        document.getElementById('cust-dropdown').style.display = 'none';
+        document.getElementById('qc-name').value = prefillName;
+        document.getElementById('qc-phone').value = '';
+        document.getElementById('qc-email').value = '';
+        document.getElementById('qc-msg').textContent = '';
+        document.getElementById('quick-cust-modal').classList.add('active');
+        setTimeout(() => document.getElementById(prefillName ? 'qc-phone' : 'qc-name').focus(), 100);
+    }
+
+    function closeQuickCust() {
+        document.getElementById('quick-cust-modal').classList.remove('active');
+    }
+
+    async function saveQuickCustomer(e) {
+        e.preventDefault();
+        const msg = document.getElementById('qc-msg');
+        const btn = e.target.querySelector('button[type=submit]');
+        const name = document.getElementById('qc-name').value.trim();
+        const phone = document.getElementById('qc-phone').value.trim();
+        const email = document.getElementById('qc-email').value.trim();
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        msg.textContent = '';
+        try {
+            const res = await fetch('/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ full_name: name, phone, email: email || null }),
+            });
+            const d = await res.json();
+            if (!res.ok) { msg.textContent = d.error || 'Failed to create customer'; return; }
+            closeQuickCust();
+            selectCustomer(d.id, name, phone);
+            showToast(`Customer "${name}" created and selected`, 'success');
+        } catch {
+            msg.textContent = 'Network error';
+        } finally {
+            btn.disabled = false; btn.textContent = 'Save & Select Customer';
+        }
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
 
     function renderPOSProducts(pList) {
         const grid = document.getElementById('pos-products');
@@ -363,7 +495,7 @@
     async function checkout() {
         if (cart.length === 0) return showToast('Add items to the cart first!', 'warning');
         const cId = document.getElementById('pos-customer').value;
-        if (!cId) return showToast('Please select a customer.', 'warning');
+        if (!cId) return showToast('Please search and select a customer first.', 'warning');
         const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
         const amountPaid = parseFloat(document.getElementById('pos-paid').value) || 0;
 
@@ -423,8 +555,8 @@
                 const search = document.getElementById('pos-search');
                 search.value = decodedText;
                 search.dispatchEvent(new Event('input'));
-                // If exact SKU match, auto-add to cart
-                const exact = products.find(p => p.sku === decodedText);
+                // Match by barcode field first, then SKU
+                const exact = products.find(p => p.barcode === decodedText || p.sku === decodedText);
                 if (exact) addToCart(exact.id);
             },
             () => {}

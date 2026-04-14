@@ -41,6 +41,7 @@ class Product(db.Model):
     quantity_in_stock = db.Column(db.Integer, default=0)
     damaged_quantity = db.Column(db.Integer, default=0)
     min_stock_level = db.Column(db.Integer, default=10)
+    barcode = db.Column(db.String(100), nullable=True, index=True)  # real-world barcode (EAN-13, UPC, etc.)
     image_url = db.Column(db.String(500), nullable=True)
     image_filename = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

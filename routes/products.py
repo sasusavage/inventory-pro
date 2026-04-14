@@ -42,6 +42,7 @@ def list_products():
             'min_stock_level': p.min_stock_level,
             'image_url': p.image_url,
             'image_filename': p.image_filename,
+            'barcode': p.barcode,
             'category_id': p.category_id,
             'category_name': p.category.name if p.category else None,
         } for p in paginated.items],
@@ -85,6 +86,7 @@ def create_product():
         product = Product(
             name=data['name'].strip(),
             sku=data['sku'].strip(),
+            barcode=(data.get('barcode') or '').strip() or None,
             cost_price=cost_price,
             selling_price=selling_price,
             quantity_in_stock=quantity,
@@ -133,6 +135,8 @@ def update_product(product_id):
                 log_stock_movement(product.id, diff, 'Manual Adjustment')
         if 'min_stock_level' in data:
             product.min_stock_level = int(data['min_stock_level'])
+        if 'barcode' in data:
+            product.barcode = (data['barcode'] or '').strip() or None
         if 'image_url' in data:
             product.image_url = data['image_url'] or None
 

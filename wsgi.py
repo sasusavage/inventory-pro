@@ -36,6 +36,16 @@ def _run_migrations(flask_app):
         except Exception:
             db.session.rollback()
 
+        # products.barcode (optional real-world barcode EAN/UPC)
+        try:
+            if 'barcode' not in prod_cols:
+                db.session.execute(
+                    text('ALTER TABLE products ADD COLUMN barcode VARCHAR(100)')
+                )
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+
         # Any future safe ALTER TABLE migrations go here (add columns only — never drop)
 
 
