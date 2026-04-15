@@ -51,32 +51,32 @@ def billing_status():
         p = sub.plan
         current_plan = {
             'id':            p.id,
-            'name':          p.name,
-            'slug':          p.slug,
+            'name':          p.display_name,
             'price_monthly': p.price_monthly,
             'max_branches':  p.max_branches,
-            'max_users':     p.max_users,
+            'max_staff':     p.max_staff,
             'max_products':  p.max_products,
-            'max_customers': p.max_customers,
         }
 
     return jsonify({
         'org':          {'id': org.id, 'name': org.name, 'currency': org.currency} if org else {},
         'subscription': {
-            'status':               sub.status if sub else 'none',
-            'current_period_end':   sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
+            'status':      sub.status if sub else 'none',
+            'expires_at':  sub.expires_at.isoformat() if sub and sub.expires_at else None,
+            'trial_ends':  sub.trial_ends_at.isoformat() if sub and sub.trial_ends_at else None,
+            'days_remaining': sub.days_remaining if sub else None,
         } if sub else {'status': 'none'},
         'current_plan': current_plan,
         'usage':        usage,
         'plans': [{
             'id':            p.id,
-            'name':          p.name,
-            'slug':          p.slug,
+            'name':          p.display_name,
             'price_monthly': p.price_monthly,
             'max_branches':  p.max_branches,
-            'max_users':     p.max_users,
+            'max_staff':     p.max_staff,
             'max_products':  p.max_products,
-            'max_customers': p.max_customers,
+            'trial_days':    p.trial_days,
+            'sort_order':    p.sort_order,
             'is_active':     p.is_active,
         } for p in plans],
     })
@@ -91,12 +91,13 @@ def billing_history():
                .order_by(BillingRecord.created_at.desc())
                .limit(50).all())
     return jsonify([{
-        'id':         r.id,
-        'amount':     r.amount,
-        'currency':   r.currency,
-        'status':     r.status,
-        'provider':   r.provider,
-        'created_at': r.created_at.isoformat(),
+        'id':             r.id,
+        'amount':         r.amount,
+        'currency':       r.currency,
+        'status':         r.status,
+        'payment_method': r.payment_method,
+        'description':    r.description,
+        'created_at':     r.created_at.isoformat(),
     } for r in records])
 
 
@@ -122,30 +123,33 @@ def upgrade_plan():
         from datetime import datetime, timedelta
         sub = _get_subscription(org_id)
         if sub:
-            sub.plan_id = plan.id
-            sub.status  = 'active'
-            sub.current_period_start = datetime.utcnow()
-            sub.current_period_end   = datetime.utcnow() + timedelta(days=30)
+            sub.plan_id    = plan.id
+            sub.status     = 'active'
+            sub.started_at = datetime.utcnow()
+            sub.expires_at = datetime.utcnow() + timedelta(days=30)
         else:
             sub = Subscription(
                 organisation_id=org_id,
                 plan_id=plan.id,
                 status='active',
-                current_period_start=datetime.utcnow(),
-                current_period_end=datetime.utcnow() + timedelta(days=30),
+                billing_cycle='monthly',
+                started_at=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=30),
             )
             db.session.add(sub)
 
         # Record the billing event
         db.session.add(BillingRecord(
             organisation_id=org_id,
+            plan_id=plan.id,
             amount=plan.price_monthly,
             currency='GHS',
-            status='paid',
-            provider='manual',
+            status='success',
+            payment_method='manual',
+            description=f'Upgrade to {plan.display_name}',
         ))
         db.session.commit()
-        return jsonify({'message': f'Upgraded to {plan.name}', 'plan': plan.name})
+        return jsonify({'message': f'Upgraded to {plan.display_name}', 'plan': plan.display_name})
     except Exception:
         db.session.rollback()
         return jsonify({'error': 'Failed to upgrade plan'}), 500
@@ -167,9 +171,9 @@ def check_plan_limit(org_id, resource: str) -> tuple[bool, str]:
         p = sub.plan
         limits = {
             'products':  p.max_products,
-            'users':     p.max_users,
+            'users':     p.max_staff,
             'branches':  p.max_branches,
-            'customers': p.max_customers,
+            'customers': 999999,  # no customer limit in current plan model
         }
 
     usage = _get_usage(org_id)

@@ -89,7 +89,7 @@ def api_tenants():
     per_page = min(request.args.get('per_page', 50, type=int), 200)
     search   = request.args.get('search', '').strip()
 
-    q = Organisation.query
+    q = Organisation.query.filter(Organisation.id != 2)  # exclude Platform Admin org
     if search:
         q = q.filter(Organisation.name.ilike(f'%{search}%') | Organisation.slug.ilike(f'%{search}%'))
 
