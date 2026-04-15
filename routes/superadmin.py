@@ -39,6 +39,14 @@ def tenants_page():
     return render_template('superadmin/tenants.html')
 
 
+@superadmin_bp.route('/domains')
+@super_admin_required
+def domains_page():
+    import os
+    platform_domain = os.environ.get('PLATFORM_DOMAIN', 'inventorypro.app')
+    return render_template('superadmin/domains.html', platform_domain=platform_domain)
+
+
 @superadmin_bp.route('/tenants/<int:org_id>')
 @super_admin_required
 def tenant_detail(org_id):
@@ -154,6 +162,107 @@ def api_suspend_tenant(org_id):
     db.session.commit()
     state = 'activated' if org.is_active else 'suspended'
     return jsonify({'message': f'Tenant {state}', 'is_active': org.is_active})
+
+
+@superadmin_bp.route('/api/domains')
+@super_admin_required
+def api_pending_domains():
+    """List all orgs with a custom domain request (verified or pending)."""
+    orgs = Organisation.query.filter(
+        Organisation.custom_domain.isnot(None)
+    ).order_by(Organisation.domain_requested_at.desc()).all()
+
+    return jsonify([{
+        'org_id':              o.id,
+        'org_name':            o.name,
+        'slug':                o.slug,
+        'custom_domain':       o.custom_domain,
+        'domain_verified':     o.domain_verified,
+        'domain_requested_at': o.domain_requested_at.isoformat() if o.domain_requested_at else None,
+        'domain_verified_at':  o.domain_verified_at.isoformat() if o.domain_verified_at else None,
+    } for o in orgs])
+
+
+@superadmin_bp.route('/api/domains/<int:org_id>/verify', methods=['POST'])
+@super_admin_required
+def api_verify_domain(org_id):
+    """
+    Super admin verifies that the tenant's custom domain CNAME is correct,
+    then activates it so the middleware will start routing requests to that org.
+
+    Optionally pass { "force": true } to skip the live DNS check (manual override).
+    """
+    import socket
+    import os
+    from datetime import datetime
+
+    org = Organisation.query.get_or_404(org_id)
+    if not org.custom_domain:
+        return jsonify({'error': 'This org has no custom domain set'}), 400
+
+    data  = request.json or {}
+    force = bool(data.get('force', False))
+
+    platform_domain = os.environ.get('PLATFORM_DOMAIN', 'inventorypro.app')
+    domain = org.custom_domain
+
+    dns_ok      = False
+    dns_detail  = ''
+
+    if not force:
+        # Live DNS check: resolve the CNAME/A of the custom domain and compare
+        try:
+            resolved = socket.getaddrinfo(domain, None)
+            platform_resolved = socket.getaddrinfo(platform_domain, None)
+
+            domain_ips   = {r[4][0] for r in resolved}
+            platform_ips = {r[4][0] for r in platform_resolved}
+
+            if domain_ips & platform_ips:
+                dns_ok     = True
+                dns_detail = f'Resolved to {", ".join(domain_ips)} — matches platform'
+            else:
+                dns_detail = (
+                    f'{domain} resolves to {", ".join(domain_ips)}, '
+                    f'but platform is at {", ".join(platform_ips)}. '
+                    f'DNS not propagated yet.'
+                )
+        except socket.gaierror as e:
+            dns_detail = f'DNS lookup failed: {e}'
+    else:
+        dns_ok     = True
+        dns_detail = 'Manually forced by super admin — DNS check skipped'
+
+    if not dns_ok:
+        return jsonify({
+            'verified': False,
+            'domain':   domain,
+            'detail':   dns_detail,
+            'hint':     f'Tenant must add a CNAME: {domain} → {platform_domain}',
+        }), 422
+
+    # Activate
+    org.domain_verified    = True
+    org.domain_verified_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'verified': True,
+        'domain':   domain,
+        'detail':   dns_detail,
+        'message':  f'{domain} is now active for {org.name}',
+    })
+
+
+@superadmin_bp.route('/api/domains/<int:org_id>/revoke', methods=['POST'])
+@super_admin_required
+def api_revoke_domain(org_id):
+    """Deactivate a custom domain (keeps the record but marks unverified)."""
+    org = Organisation.query.get_or_404(org_id)
+    org.domain_verified    = False
+    org.domain_verified_at = None
+    db.session.commit()
+    return jsonify({'message': f'Custom domain {org.custom_domain} deactivated for {org.name}'})
 
 
 @superadmin_bp.route('/api/plans')

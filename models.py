@@ -52,9 +52,19 @@ class Organisation(db.Model):
     address      = db.Column(db.String(255), nullable=True)
     logo_url     = db.Column(db.String(500), nullable=True)
     currency     = db.Column(db.String(5), default='GHS')
+    country      = db.Column(db.String(60), nullable=True)
+    timezone     = db.Column(db.String(60), default='Africa/Accra')
     is_active    = db.Column(db.Boolean, default=True)
     is_verified  = db.Column(db.Boolean, default=False)
     created_at   = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    # ── Domain / subdomain ────────────────────────────────────────────────────
+    # Subdomain: {slug}.inventorypro.app  (auto-assigned, no action needed)
+    # Custom domain: e.g. pos.myshop.com — tenant requests, super admin verifies
+    custom_domain        = db.Column(db.String(255), unique=True, nullable=True, index=True)
+    domain_verified      = db.Column(db.Boolean, default=False)
+    domain_verified_at   = db.Column(db.DateTime, nullable=True)
+    domain_requested_at  = db.Column(db.DateTime, nullable=True)  # when tenant submitted request
 
     branches      = db.relationship('Branch',       backref='organisation', lazy=True)
     subscriptions = db.relationship('Subscription', backref='organisation', lazy=True,

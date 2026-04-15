@@ -93,6 +93,22 @@
         </div>
     </div>
 
+    <!-- Domain / Subdomain -->
+    <div class="card">
+        <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
+            <span style="font-size:1.5rem;">🌐</span>
+            <div>
+                <h3 style="margin:0;">Domain &amp; Subdomain</h3>
+                <p style="color:var(--text-muted);font-size:0.85rem;margin:0;">
+                    Your store's web address. Use your free subdomain or connect your own domain.
+                </p>
+            </div>
+        </div>
+        <div class="card-body" id="domain-body">
+            <p style="color:var(--text-muted);font-size:0.85rem;">Loading…</p>
+        </div>
+    </div>
+
     <!-- Sale Notifications Toggle -->
     <div class="card">
         <div class="card-header" style="display:flex;align-items:center;gap:0.75rem;">
@@ -201,5 +217,128 @@
         msg.style.color = res.ok ? 'var(--text-success, #10b981)' : '#f43f5e';
         msg.textContent = res.ok ? '✓ ' + d.message : d.error;
     }
+
+    // ── Domain management ─────────────────────────────────────────────────────
+    async function loadDomainInfo() {
+        const box = document.getElementById('domain-body');
+        try {
+            const d = await fetch('/api/settings/domain').then(r => r.json());
+            renderDomainInfo(d);
+        } catch {
+            box.innerHTML = '<p style="color:#f43f5e;font-size:.85rem;">Failed to load domain info.</p>';
+        }
+    }
+
+    function renderDomainInfo(d) {
+        const box = document.getElementById('domain-body');
+
+        const verifiedBadge = d.domain_verified
+            ? '<span class="badge badge-success" style="font-size:.72rem;">✓ Active</span>'
+            : d.custom_domain
+                ? '<span class="badge badge-warning" style="font-size:.72rem;">⏳ Pending Verification</span>'
+                : '';
+
+        const customDomainSection = d.custom_domain ? `
+            <div style="background:var(--bg-base);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);
+                        padding:.75rem 1rem;margin-bottom:1rem;display:flex;justify-content:space-between;
+                        align-items:center;flex-wrap:wrap;gap:.5rem;">
+                <div>
+                    <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.2rem;">Custom Domain</div>
+                    <strong style="font-size:.95rem;">${esc(d.custom_domain)}</strong>
+                    <span style="margin-left:.5rem;">${verifiedBadge}</span>
+                    ${!d.domain_verified ? `<p style="font-size:.75rem;color:var(--text-muted);margin:.3rem 0 0;">
+                        Waiting for a super admin to verify your DNS. Make sure your CNAME is set correctly.
+                    </p>` : ''}
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="removeDomain()">✕ Remove</button>
+            </div>` : '';
+
+        box.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+
+                <!-- Free subdomain -->
+                <div style="background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);
+                            border-radius:var(--radius-sm);padding:.75rem 1rem;">
+                    <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.3rem;">Your Free Subdomain</div>
+                    <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+                        <code style="font-size:.95rem;font-weight:700;">${esc(d.subdomain_url)}</code>
+                        <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(d.subdomain_url)}').then(()=>window.showToastNotification('Copied!','success'))">
+                            📋 Copy
+                        </button>
+                        <a href="${esc(d.subdomain_url)}" target="_blank" class="btn btn-secondary btn-sm">↗ Open</a>
+                    </div>
+                    <p style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0 0;">
+                        This works immediately — share it with your staff and customers.
+                    </p>
+                </div>
+
+                ${customDomainSection}
+
+                <!-- Request / change custom domain -->
+                ${!d.custom_domain ? `
+                <div>
+                    <div style="font-size:.82rem;font-weight:600;margin-bottom:.5rem;">Connect Your Own Domain (Pro &amp; Enterprise)</div>
+                    <div style="background:var(--bg-base);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:.75rem 1rem;margin-bottom:.75rem;font-size:.82rem;color:var(--text-muted);line-height:1.7;">
+                        <strong style="color:var(--text);">Setup instructions:</strong><br>
+                        1. Log in to your domain registrar (e.g. GoDaddy, Namecheap, Hover)<br>
+                        2. Add a <code>CNAME</code> record:<br>
+                        &nbsp;&nbsp;&nbsp;<strong>Host:</strong> <code>pos</code> (or <code>shop</code>, <code>@</code>, etc.)<br>
+                        &nbsp;&nbsp;&nbsp;<strong>Points to:</strong> <code>${esc(d.cname_target)}</code><br>
+                        3. Wait for DNS to propagate (can take up to 24h)<br>
+                        4. Enter the full domain below and submit
+                    </div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                        <input type="text" id="custom-domain-input" class="form-control"
+                               placeholder="pos.myshop.com" style="flex:1;min-width:200px;">
+                        <button class="btn btn-primary" onclick="submitDomain()">Submit Domain Request</button>
+                    </div>
+                    <p id="domain-msg" style="font-size:.82rem;min-height:1.2em;margin-top:.5rem;"></p>
+                </div>` : `
+                <div>
+                    <div style="font-size:.82rem;font-weight:600;margin-bottom:.5rem;">Change Custom Domain</div>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+                        <input type="text" id="custom-domain-input" class="form-control"
+                               value="${esc(d.custom_domain)}" style="flex:1;min-width:200px;">
+                        <button class="btn btn-primary" onclick="submitDomain()">Update Domain</button>
+                    </div>
+                    <p id="domain-msg" style="font-size:.82rem;min-height:1.2em;margin-top:.5rem;"></p>
+                </div>`}
+
+            </div>`;
+    }
+
+    async function submitDomain() {
+        const domain = (document.getElementById('custom-domain-input')?.value || '').trim();
+        const msg    = document.getElementById('domain-msg');
+        if (!domain) { msg.textContent = 'Enter a domain name first.'; return; }
+
+        const res = await fetch('/api/settings/domain', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ custom_domain: domain }),
+        });
+        const d = await res.json();
+        if (msg) {
+            msg.style.color = res.ok ? '#10b981' : '#f43f5e';
+            msg.textContent  = res.ok ? '✓ ' + d.message : '✗ ' + (d.error || 'Failed');
+        }
+        if (res.ok) loadDomainInfo();
+    }
+
+    async function removeDomain() {
+        if (!confirm('Remove your custom domain? Your free subdomain will still work.')) return;
+        const res = await fetch('/api/settings/domain', { method: 'DELETE' });
+        const d   = await res.json();
+        window.showToastNotification(d.message, res.ok ? 'success' : 'error');
+        if (res.ok) loadDomainInfo();
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    // Load domain info alongside other settings
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings();
+        loadDomainInfo();
+    });
 </script>
 {% endblock %}
