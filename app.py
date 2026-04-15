@@ -46,6 +46,7 @@ def create_app(config=None):
     from routes.activity import activity_bp
     from routes.onboarding import onboarding_bp
     from routes.superadmin import superadmin_bp
+    from routes.billing import billing_bp
     from telegram_bot import bot_bp
 
     for bp in (
@@ -54,7 +55,7 @@ def create_app(config=None):
         refunds_bp, reports_bp, users_bp, settings_bp,
         ai_bp, analytics_bp, categories_bp, expenses_bp,
         stock_adj_bp, loyalty_bp, activity_bp, onboarding_bp,
-        superadmin_bp, bot_bp,
+        superadmin_bp, billing_bp, bot_bp,
     ):
         app.register_blueprint(bp)
 

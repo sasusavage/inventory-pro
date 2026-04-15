@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InventoryPro — Smart POS & Inventory for African Businesses</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --indigo: #6366f1; --indigo-dark: #4f46e5; --indigo-light: #818cf8;
+            --green: #10b981; --amber: #f59e0b; --red: #ef4444;
+            --dark: #0f172a; --dark2: #1e293b; --dark3: #334155;
+            --text: #f1f5f9; --text-muted: #94a3b8; --border: #334155;
+        }
+        body { background: var(--dark); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
+        a { color: inherit; text-decoration: none; }
+
+        /* NAV */
+        nav { display: flex; justify-content: space-between; align-items: center;
+              padding: 1rem 2rem; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+              background: rgba(15,23,42,0.95); backdrop-filter: blur(8px); z-index: 100; }
+        .nav-logo { font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: .5rem; }
+        .nav-links { display: flex; gap: 1.5rem; align-items: center; font-size: .9rem; }
+        .nav-links a { color: var(--text-muted); transition: color .2s; }
+        .nav-links a:hover { color: var(--text); }
+        .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .55rem 1.2rem;
+               border-radius: .5rem; font-size: .88rem; font-weight: 600; cursor: pointer;
+               border: none; transition: all .2s; }
+        .btn-primary { background: var(--indigo); color: #fff; }
+        .btn-primary:hover { background: var(--indigo-dark); }
+        .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .btn-outline:hover { border-color: var(--indigo-light); color: var(--indigo-light); }
+        .btn-lg { padding: .75rem 1.75rem; font-size: 1rem; border-radius: .6rem; }
+        .btn-green { background: var(--green); color: #fff; }
+        .btn-green:hover { background: #059669; }
+
+        /* HERO */
+        .hero { text-align: center; padding: 6rem 2rem 4rem; max-width: 860px; margin: 0 auto; }
+        .hero-badge { display: inline-flex; align-items: center; gap: .4rem; background: rgba(99,102,241,.15);
+                      border: 1px solid rgba(99,102,241,.3); color: var(--indigo-light);
+                      padding: .3rem .9rem; border-radius: 2rem; font-size: .78rem; font-weight: 600;
+                      letter-spacing: .5px; margin-bottom: 1.5rem; }
+        .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 900; line-height: 1.15;
+                   background: linear-gradient(135deg, #f1f5f9, var(--indigo-light));
+                   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                   background-clip: text; margin-bottom: 1.25rem; }
+        .hero p { font-size: 1.1rem; color: var(--text-muted); max-width: 600px; margin: 0 auto 2rem; }
+        .hero-cta { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+        .hero-sub { font-size: .78rem; color: var(--text-muted); margin-top: 1rem; }
+
+        /* STATS BAR */
+        .stats-bar { display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
+                     padding: 2rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+                     background: var(--dark2); }
+        .stat { text-align: center; }
+        .stat strong { display: block; font-size: 1.8rem; font-weight: 900; color: var(--indigo-light); }
+        .stat span { font-size: .78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
+        /* SECTION */
+        section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
+        .section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+                          color: var(--indigo-light); margin-bottom: .75rem; }
+        .section-title { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 800; margin-bottom: .75rem; }
+        .section-sub { font-size: .95rem; color: var(--text-muted); max-width: 560px; margin-bottom: 3rem; }
+
+        /* FEATURES GRID */
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+        .feature-card { background: var(--dark2); border: 1px solid var(--border); border-radius: .75rem;
+                         padding: 1.5rem; transition: border-color .2s; }
+        .feature-card:hover { border-color: var(--indigo); }
+        .feature-icon { font-size: 1.75rem; margin-bottom: .75rem; }
+        .feature-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: .4rem; }
+        .feature-card p { font-size: .85rem; color: var(--text-muted); line-height: 1.5; }
+
+        /* PRICING */
+        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.25rem; align-items: start; }
+        .plan-card { background: var(--dark2); border: 1px solid var(--border); border-radius: 1rem;
+                      padding: 1.75rem; position: relative; }
+        .plan-card.popular { border-color: var(--indigo); background: linear-gradient(145deg, var(--dark2), rgba(99,102,241,.07)); }
+        .popular-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+                          background: var(--indigo); color: #fff; font-size: .7rem; font-weight: 700;
+                          padding: .2rem .9rem; border-radius: 2rem; text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+        .plan-name { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+                      color: var(--text-muted); margin-bottom: .5rem; }
+        .plan-price { font-size: 2.2rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; }
+        .plan-price span { font-size: .9rem; font-weight: 400; color: var(--text-muted); }
+        .plan-desc { font-size: .82rem; color: var(--text-muted); margin-bottom: 1.25rem; }
+        .plan-features { list-style: none; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: .5rem; }
+        .plan-features li { font-size: .83rem; display: flex; gap: .5rem; align-items: flex-start; }
+        .plan-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+        .plan-features li.no::before { content: '✗'; color: var(--red); }
+        .plan-features li.no { color: var(--text-muted); }
+
+        /* HOW IT WORKS */
+        .steps { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2rem; }
+        .step { text-align: center; }
+        .step-num { width: 48px; height: 48px; border-radius: 50%; background: var(--indigo);
+                     display: flex; align-items: center; justify-content: center;
+                     font-weight: 900; font-size: 1.1rem; margin: 0 auto .75rem; }
+        .step h3 { font-size: .95rem; font-weight: 700; margin-bottom: .4rem; }
+        .step p { font-size: .83rem; color: var(--text-muted); }
+
+        /* CTA BAND */
+        .cta-band { background: linear-gradient(135deg, var(--indigo-dark), #312e81);
+                     border-radius: 1.25rem; padding: 3.5rem 2rem; text-align: center; margin: 0 2rem 5rem; }
+        .cta-band h2 { font-size: 1.8rem; font-weight: 900; margin-bottom: .75rem; }
+        .cta-band p { color: rgba(255,255,255,.7); margin-bottom: 1.75rem; }
+
+        /* FOOTER */
+        footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center;
+                  font-size: .8rem; color: var(--text-muted); }
+        footer a { color: var(--indigo-light); }
+
+        /* MOBILE */
+        @media (max-width: 640px) {
+            nav { padding: 1rem; }
+            .nav-links { gap: .75rem; }
+            .hero { padding: 4rem 1rem 2.5rem; }
+            .stats-bar { gap: 1.5rem; }
+            section { padding: 3rem 1rem; }
+            .cta-band { margin: 0 1rem 3rem; padding: 2.5rem 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+    <div class="nav-logo">📦 InventoryPro</div>
+    <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/login-page" class="btn btn-outline">Sign In</a>
+        <a href="/signup" class="btn btn-primary">Start Free Trial</a>
+    </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+    <div class="hero-badge">🇬🇭 Built for Ghana &amp; Africa</div>
+    <h1>Run Your Shop Smarter.<br>Sell More. Stress Less.</h1>
+    <p>InventoryPro is the all-in-one POS and inventory platform built for Ghanaian businesses — from single shops to multi-branch chains. Works offline. Accepts MoMo.</p>
+    <div class="hero-cta">
+        <a href="/signup" class="btn btn-primary btn-lg">🚀 Start Free — No Card Needed</a>
+        <a href="#pricing" class="btn btn-outline btn-lg">See Pricing</a>
+    </div>
+    <p class="hero-sub">14-day free trial · No credit card · Cancel anytime</p>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+    <div class="stat"><strong>17+</strong><span>Modules</span></div>
+    <div class="stat"><strong>PWA</strong><span>Works Offline</span></div>
+    <div class="stat"><strong>MoMo</strong><span>Payments Accepted</span></div>
+    <div class="stat"><strong>4 Plans</strong><span>From Starter to Enterprise</span></div>
+    <div class="stat"><strong>Multi-Branch</strong><span>One Account</span></div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+    <div class="section-label">Everything You Need</div>
+    <h2 class="section-title">All Features. One Platform.</h2>
+    <p class="section-sub">Every tool your shop needs — POS, inventory, staff, customers, reports and more. Turn on only what you need.</p>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🖥️</div>
+            <h3>Point of Sale</h3>
+            <p>Fast checkout with barcode scanning, product search, customer lookup, discounts per item or whole order, and receipt printing.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📶</div>
+            <h3>Offline Mode</h3>
+            <p>Keep selling even without internet. Sales queue automatically and sync to the cloud when you're back online.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📦</div>
+            <h3>Inventory Management</h3>
+            <p>Track every product — stock levels, low-stock alerts, reorder thresholds, and full movement history.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📋</div>
+            <h3>Purchase Orders</h3>
+            <p>Create POs, receive stock against them (full or partial), track outstanding orders and auto-update inventory on receipt.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">👥</div>
+            <h3>Customer Management</h3>
+            <p>Customer profiles, full purchase history, outstanding balances, loyalty points and printable account statements.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎁</div>
+            <h3>Loyalty Points</h3>
+            <p>Earn points on every purchase. Redeem at checkout. Configure earn and redemption rates from your settings.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🛡️</div>
+            <h3>Staff &amp; Roles</h3>
+            <p>Owner, Manager, and Cashier roles. Per-cashier sales tracking, manager overrides for refunds and discounts.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📈</div>
+            <h3>P&amp;L Reports</h3>
+            <p>Revenue, COGS, gross profit, operating expenses and net profit — all in one clean report with date filters.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🏆</div>
+            <h3>Top Customers</h3>
+            <p>Leaderboard of your best customers by spend. See outstanding balances and link straight to their statement.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">💸</div>
+            <h3>Expense Tracking</h3>
+            <p>Log all operating expenses by category — rent, salary, transport, utilities — and see them on your P&amp;L.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">↩️</div>
+            <h3>Refunds</h3>
+            <p>Process refunds with approval flow, stock auto-restore, and full audit trail on every returned item.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <h3>AI Analytics</h3>
+            <p>AI-generated insights on your sales trends, top products, and inventory health delivered on demand or by scheduled Telegram report.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔧</div>
+            <h3>Stock Adjustments</h3>
+            <p>Record damages, theft, corrections, and audits — every adjustment is logged with reason and timestamp.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🚚</div>
+            <h3>Supplier Management</h3>
+            <p>Supplier directory, payment history, and smart reorder suggestions for low-stock items with one-click draft POs.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📜</div>
+            <h3>Activity Log</h3>
+            <p>Every action — sales, logins, edits, deletions — is timestamped and attributed to the user who did it.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📱</div>
+            <h3>Install on Any Device</h3>
+            <p>Works as a PWA — install on Android, iPhone, Windows, or Mac. One codebase, every platform, no app store needed.</p>
+        </div>
+    </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section style="background: var(--dark2); max-width: 100%; padding: 5rem 2rem;">
+    <div style="max-width: 1100px; margin: 0 auto;">
+        <div class="section-label">How It Works</div>
+        <h2 class="section-title">Up and running in minutes</h2>
+        <p class="section-sub">No IT team. No lengthy setup. Just sign up and start selling.</p>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <h3>Create Your Store</h3>
+                <p>Sign up, name your store, choose your currency and country. Done in 30 seconds.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <h3>Add Your Products</h3>
+                <p>Import your catalogue or add products one by one with names, prices, stock and barcodes.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <h3>Invite Your Staff</h3>
+                <p>Add cashiers and managers. Assign them to branches. Control what each role can see and do.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <h3>Start Selling</h3>
+                <p>Open the POS on any device — phone, tablet, laptop. Scan barcodes, take payment, print receipt.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing">
+    <div class="section-label">Simple Pricing</div>
+    <h2 class="section-title">Pick the plan that fits your business</h2>
+    <p class="section-sub">All plans include a 14-day free trial. Yearly billing saves you 2 months.</p>
+
+    <div class="pricing-grid">
+        <!-- Starter -->
+        <div class="plan-card">
+            <div class="plan-name">Starter</div>
+            <div class="plan-price">GHS 59<span>/mo</span></div>
+            <div class="plan-desc">Perfect for single-location shops just getting started.</div>
+            <ul class="plan-features">
+                <li>1 Branch</li>
+                <li>Up to 2 Staff</li>
+                <li>Up to 1,000 Products</li>
+                <li>POS + Inventory</li>
+                <li>Basic Sales Reports</li>
+                <li>Customer Management</li>
+                <li class="no">P&amp;L Report</li>
+                <li class="no">AI Analytics</li>
+                <li class="no">Multi-Branch</li>
+            </ul>
+            <a href="/signup" class="btn btn-outline" style="width:100%; justify-content:center;">Start Free Trial</a>
+        </div>
+
+        <!-- Growth -->
+        <div class="plan-card popular">
+            <div class="popular-badge">Most Popular</div>
+            <div class="plan-name">Growth</div>
+            <div class="plan-price">GHS 179<span>/mo</span></div>
+            <div class="plan-desc">For growing businesses with multiple staff or branches.</div>
+            <ul class="plan-features">
+                <li>Up to 3 Branches</li>
+                <li>Up to 10 Staff</li>
+                <li>Up to 10,000 Products</li>
+                <li>Everything in Starter</li>
+                <li>P&amp;L Report</li>
+                <li>Top Customers Leaderboard</li>
+                <li>Loyalty Points System</li>
+                <li>Purchase Orders</li>
+                <li class="no">AI Analytics</li>
+            </ul>
+            <a href="/signup" class="btn btn-primary" style="width:100%; justify-content:center;">Start Free Trial</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="plan-card">
+            <div class="plan-name">Pro</div>
+            <div class="plan-price">GHS 449<span>/mo</span></div>
+            <div class="plan-desc">Unlimited everything for established businesses.</div>
+            <ul class="plan-features">
+                <li>Unlimited Branches</li>
+                <li>Unlimited Staff</li>
+                <li>Unlimited Products</li>
+                <li>Everything in Growth</li>
+                <li>AI Analytics &amp; Insights</li>
+                <li>Telegram Notifications</li>
+                <li>Advanced Reports (CSV/PDF)</li>
+                <li>Priority Support</li>
+                <li class="no">White-label / Custom Domain</li>
+            </ul>
+            <a href="/signup" class="btn btn-outline" style="width:100%; justify-content:center;">Start Free Trial</a>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="plan-card">
+            <div class="plan-name">Enterprise</div>
+            <div class="plan-price" style="font-size:1.5rem;">Custom</div>
+            <div class="plan-desc">For large chains, franchises, and resellers needing white-label.</div>
+            <ul class="plan-features">
+                <li>Everything in Pro</li>
+                <li>White-label Branding</li>
+                <li>Custom Domain</li>
+                <li>Dedicated Support &amp; SLA</li>
+                <li>Custom Integrations</li>
+                <li>Bulk Staff Import</li>
+                <li>On-site Training</li>
+            </ul>
+            <a href="mailto:hello@inventorypro.app" class="btn btn-outline" style="width:100%; justify-content:center;">Contact Sales</a>
+        </div>
+    </div>
+</section>
+
+<!-- CTA BAND -->
+<div class="cta-band">
+    <h2>Ready to take control of your business?</h2>
+    <p>Join hundreds of Ghanaian businesses already using InventoryPro. Start your free 14-day trial today — no credit card required.</p>
+    <a href="/signup" class="btn btn-green btn-lg">🚀 Create Your Free Store</a>
+</div>
+
+<!-- FOOTER -->
+<footer>
+    <p style="margin-bottom:.5rem;">📦 <strong>InventoryPro</strong> — Smart POS &amp; Inventory for African Businesses</p>
+    <p>
+        <a href="/signup">Start Free Trial</a> &nbsp;·&nbsp;
+        <a href="/login-page">Sign In</a> &nbsp;·&nbsp;
+        <a href="#pricing">Pricing</a> &nbsp;·&nbsp;
+        <a href="mailto:hello@inventorypro.app">Contact</a>
+    </p>
+    <p style="margin-top:1rem;">© 2025 InventoryPro. Built for Ghana 🇬🇭</p>
+</footer>
+
+</body>
+</html>

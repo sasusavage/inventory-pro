@@ -80,6 +80,11 @@ def create_product():
         return jsonify({'error': 'Prices and quantity must be non-negative'}), 400
 
     org_id = g.org_id
+    from routes.billing import check_plan_limit
+    allowed, msg = check_plan_limit(org_id, 'products')
+    if not allowed:
+        return jsonify({'error': msg}), 403
+
     existing = Product.query.filter_by(sku=data['sku'].strip(), organisation_id=org_id).first()
     if existing:
         return jsonify({'error': 'SKU already exists'}), 409

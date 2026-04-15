@@ -61,6 +61,11 @@ def create_customer():
         return jsonify({'error': f'Missing fields: {", ".join(missing)}'}), 400
 
     org_id = g.org_id
+    from routes.billing import check_plan_limit
+    allowed, msg = check_plan_limit(org_id, 'customers')
+    if not allowed:
+        return jsonify({'error': msg}), 403
+
     phone = data['phone'].strip()
     if Customer.query.filter_by(phone=phone, organisation_id=org_id).first():
         return jsonify({'error': 'A customer with this phone number already exists'}), 409

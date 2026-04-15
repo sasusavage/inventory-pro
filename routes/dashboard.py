@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, jsonify, session, redirect, url_for, g
+from flask import Blueprint, render_template, jsonify, session, g
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from models import db, Product, Sale, SaleItem, SupplierPayment, PurchaseOrder, StockMovement
@@ -15,8 +15,13 @@ _stats_cache = {}
 @dashboard_bp.route('/')
 def index():
     if 'user_id' not in session:
-        return redirect(url_for('auth.login_page'))
+        return render_template('landing.html')
     return render_template('dashboard.html', user_role=session.get('role'))
+
+
+@dashboard_bp.route('/home')
+def landing():
+    return render_template('landing.html')
 
 
 @dashboard_bp.route('/dashboard/stats')

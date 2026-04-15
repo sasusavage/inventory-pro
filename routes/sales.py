@@ -152,6 +152,7 @@ def create_sale():
             amount_paid=amount_paid,
             balance_due=0,
             payment_status='UNPAID',
+            payment_method=data.get('payment_method', 'cash'),
         )
         db.session.add(new_sale)
         db.session.flush()

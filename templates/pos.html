@@ -77,6 +77,8 @@
     }
     .pos-cart-item-name { flex: 1; font-size: 0.88rem; font-weight: 600; }
     .pos-cart-item-price { font-size: 0.8rem; color: var(--text-muted); }
+    .pay-method-btn { padding: 0.45rem 0.3rem; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text-muted); cursor: pointer; transition: all 0.15s; }
+    .pay-method-btn.active { border-color: var(--accent-primary); background: rgba(99,102,241,0.12); color: var(--accent-primary); }
     .pos-summary {
         border-top: 2px solid var(--border-subtle);
         padding-top: 1rem;
@@ -196,6 +198,15 @@
             <div class="pos-total-row">
                 <span>Total</span>
                 <span id="pos-total">$0.00</span>
+            </div>
+            <div class="form-group" style="margin-bottom:0.6rem;">
+                <label style="font-size:0.8rem; font-weight:600;">Payment Method</label>
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:0.4rem; margin-top:0.3rem;">
+                    <button type="button" class="pay-method-btn active" data-method="cash" onclick="selectPayMethod(this)">💵 Cash</button>
+                    <button type="button" class="pay-method-btn" data-method="momo" onclick="selectPayMethod(this)">📱 MoMo</button>
+                    <button type="button" class="pay-method-btn" data-method="bank" onclick="selectPayMethod(this)">🏦 Bank</button>
+                </div>
+                <input type="hidden" id="pos-payment-method" value="cash">
             </div>
             <div class="form-group" style="margin-bottom:0.75rem;">
                 <label style="font-size:0.8rem; font-weight:600;">Amount Paid</label>
@@ -492,12 +503,19 @@
         }
     }
 
+    function selectPayMethod(btn) {
+        document.querySelectorAll('.pay-method-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('pos-payment-method').value = btn.dataset.method;
+    }
+
     async function checkout() {
         if (cart.length === 0) return showToast('Add items to the cart first!', 'warning');
         const cId = document.getElementById('pos-customer').value;
         if (!cId) return showToast('Please search and select a customer first.', 'warning');
         const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
         const amountPaid = parseFloat(document.getElementById('pos-paid').value) || 0;
+        const paymentMethod = document.getElementById('pos-payment-method').value || 'cash';
 
         const btn = document.getElementById('checkout-btn');
         btn.disabled = true;
@@ -510,7 +528,8 @@
                 body: JSON.stringify({
                     customer_id: parseInt(cId),
                     items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, price: i.selling_price })),
-                    amount_paid: amountPaid
+                    amount_paid: amountPaid,
+                    payment_method: paymentMethod,
                 })
             });
             const result = await res.json();

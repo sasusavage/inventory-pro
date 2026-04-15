@@ -1,0 +1,181 @@
+{% extends "layout.html" %}
+{% block title %}Billing & Plan — InventoryPro{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">💳 Billing &amp; Plan</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadHistory()">📜 Payment History</button>
+</header>
+
+<div id="billing-content">
+    <p style="color:var(--text-muted);padding:2rem;text-align:center;">Loading…</p>
+</div>
+
+<!-- Payment History Modal -->
+<div id="history-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+     z-index:1000; align-items:center; justify-content:center; padding:1rem;">
+    <div class="card" style="width:100%; max-width:560px; max-height:80vh; overflow-y:auto; padding:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+            <h3 style="font-size:1rem;">Payment History</h3>
+            <button onclick="document.getElementById('history-modal').style.display='none'"
+                    class="btn btn-secondary btn-sm">✕</button>
+        </div>
+        <div id="history-list"><p style="color:var(--text-muted);">Loading…</p></div>
+    </div>
+</div>
+
+<style>
+.plan-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1rem; margin-top:1.5rem; }
+.plan-tile { background:var(--bg-elevated); border:2px solid var(--border-subtle); border-radius:var(--radius-md); padding:1.5rem; }
+.plan-tile.current { border-color:var(--accent-primary); }
+.plan-tile h3 { font-size:.75rem; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin-bottom:.4rem; }
+.plan-price { font-size:1.9rem; font-weight:900; margin-bottom:.25rem; }
+.plan-price small { font-size:.85rem; font-weight:400; color:var(--text-muted); }
+.plan-features { font-size:.82rem; color:var(--text-muted); margin:1rem 0; display:flex; flex-direction:column; gap:.35rem; }
+.plan-features li { list-style:none; }
+.plan-features li::before { content:'✓ '; color:var(--accent-primary); }
+.usage-bar { height:6px; background:var(--border-subtle); border-radius:3px; margin-top:.4rem; overflow:hidden; }
+.usage-fill { height:100%; border-radius:3px; background:var(--accent-primary); transition:width .4s; }
+.usage-fill.warn { background:#f59e0b; }
+.usage-fill.danger { background:#ef4444; }
+.badge-trial { background:#f59e0b22; color:#f59e0b; border:1px solid #f59e0b44; }
+.badge-active { background:#10b98122; color:#10b981; border:1px solid #10b98144; }
+.badge-expired { background:#ef444422; color:#ef4444; border:1px solid #ef444444; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', loadBilling);
+
+async function loadBilling() {
+    const d = await fetch('/api/billing/status').then(r => r.json());
+    renderBilling(d);
+}
+
+function renderBilling(d) {
+    const sub     = d.subscription || {};
+    const plan    = d.current_plan;
+    const usage   = d.usage || {};
+    const org     = d.org || {};
+    const plans   = d.plans || [];
+
+    const statusBadge = {
+        active: '<span class="badge badge-active">Active</span>',
+        trial:  '<span class="badge badge-trial">Trial</span>',
+        grace:  '<span class="badge badge-warning">Grace Period</span>',
+        expired:'<span class="badge badge-danger">Expired</span>',
+        none:   '<span class="badge badge-secondary">No Plan</span>',
+    }[sub.status || 'none'] || '';
+
+    let usageHtml = '';
+    if (plan) {
+        usageHtml = `
+        <div class="card" style="padding:1.25rem; margin-bottom:1rem;">
+            <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;">USAGE</h3>
+            ${usageItem('Products', usage.products, plan.max_products)}
+            ${usageItem('Staff Accounts', usage.users, plan.max_users)}
+            ${usageItem('Branches', usage.branches, plan.max_branches)}
+        </div>`;
+    }
+
+    let currentPlanHtml = plan ? `
+        <div class="card" style="padding:1.25rem; margin-bottom:1rem; border-color:var(--accent-primary);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.5rem;">
+                <div>
+                    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:.25rem;">Current Plan</div>
+                    <div style="font-size:1.4rem;font-weight:900;">${esc(plan.name)}</div>
+                    <div style="font-size:.85rem;color:var(--text-muted);">GHS ${plan.price_monthly}/month</div>
+                </div>
+                <div style="text-align:right;">
+                    ${statusBadge}
+                    ${sub.current_period_end ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem;">Renews ${new Date(sub.current_period_end).toLocaleDateString()}</div>` : ''}
+                </div>
+            </div>
+        </div>` : `
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem;border-color:#f59e0b;">
+            <p style="color:#f59e0b;font-weight:600;">⚠️ No active plan — select a plan below to continue.</p>
+        </div>`;
+
+    const planTiles = plans.map(p => {
+        const isCurrent = plan && plan.id === p.id;
+        return `
+        <div class="plan-tile ${isCurrent ? 'current' : ''}">
+            ${isCurrent ? '<div style="font-size:.7rem;font-weight:700;color:var(--accent-primary);margin-bottom:.5rem;">✓ CURRENT PLAN</div>' : ''}
+            <h3>${esc(p.name)}</h3>
+            <div class="plan-price">GHS ${p.price_monthly}<small>/mo</small></div>
+            <ul class="plan-features">
+                <li>${p.max_branches >= 999 ? 'Unlimited' : p.max_branches} Branch${p.max_branches !== 1 ? 'es' : ''}</li>
+                <li>${p.max_users >= 999 ? 'Unlimited' : p.max_users} Staff</li>
+                <li>${p.max_products >= 9999999 ? 'Unlimited' : p.max_products.toLocaleString()} Products</li>
+            </ul>
+            ${isCurrent
+                ? '<button class="btn btn-secondary btn-sm" style="width:100%;" disabled>Current Plan</button>'
+                : `<button class="btn btn-primary btn-sm" style="width:100%;" onclick="upgradeTo(${p.id}, '${esc(p.name)}', ${p.price_monthly})">
+                    ${plan && p.price_monthly > plan.price_monthly ? '⬆ Upgrade' : plan && p.price_monthly < plan.price_monthly ? '⬇ Downgrade' : 'Select'} to ${esc(p.name)}
+                   </button>`
+            }
+        </div>`;
+    }).join('');
+
+    document.getElementById('billing-content').innerHTML = `
+        ${currentPlanHtml}
+        ${usageHtml}
+        <div style="margin-top:.5rem;">
+            <h3 style="font-size:.9rem;font-weight:700;margin-bottom:.25rem;">Available Plans</h3>
+            <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:1rem;">Upgrade or downgrade anytime. Changes take effect immediately.</p>
+            <div class="plan-grid">${planTiles}</div>
+        </div>
+        <p style="font-size:.75rem;color:var(--text-muted);margin-top:1.5rem;">
+            💡 Need MoMo or bank transfer payment? Contact support to manually activate your plan.
+        </p>`;
+}
+
+function usageItem(label, current, max) {
+    const pct = max >= 999 ? 0 : Math.min(100, Math.round((current / max) * 100));
+    const cls = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
+    const maxLabel = max >= 999 ? '∞' : max.toLocaleString();
+    return `
+    <div style="margin-bottom:.9rem;">
+        <div style="display:flex;justify-content:space-between;font-size:.83rem;margin-bottom:.3rem;">
+            <span>${label}</span>
+            <span style="color:var(--text-muted);">${current} / ${maxLabel}</span>
+        </div>
+        ${max < 999 ? `<div class="usage-bar"><div class="usage-fill ${cls}" style="width:${pct}%;"></div></div>` : ''}
+    </div>`;
+}
+
+async function upgradeTo(planId, planName, price) {
+    if (!confirm(`Switch to ${planName} plan at GHS ${price}/month?`)) return;
+    const res  = await fetch('/api/billing/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: planId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+        window.showToastNotification(data.message, 'success');
+        loadBilling();
+    } else {
+        window.showToastNotification(data.error || 'Failed', 'error');
+    }
+}
+
+async function loadHistory() {
+    document.getElementById('history-modal').style.display = 'flex';
+    const d = await fetch('/api/billing/history').then(r => r.json());
+    const el = document.getElementById('history-list');
+    if (!d.length) { el.innerHTML = '<p style="color:var(--text-muted);">No payments recorded yet.</p>'; return; }
+    el.innerHTML = `<table style="width:100%;font-size:.85rem;">
+        <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th>Provider</th></tr></thead>
+        <tbody>${d.map(r => `
+        <tr>
+            <td style="padding:.35rem 0;">${new Date(r.created_at).toLocaleDateString()}</td>
+            <td>${r.currency} ${r.amount}</td>
+            <td><span class="badge ${r.status === 'paid' ? 'badge-success' : 'badge-warning'}">${r.status}</span></td>
+            <td style="color:var(--text-muted);">${r.provider}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}
