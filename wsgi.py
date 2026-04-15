@@ -139,6 +139,20 @@ def _run_migrations(flask_app):
         if sadj_cols and 'organisation_id' not in sadj_cols:
             safe_alter('ALTER TABLE stock_adjustments ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)')
 
+        # ── branches: add columns before seeding ─────────────────────────────
+        branch_cols = cols('branches')
+        if branch_cols:
+            if 'organisation_id' not in branch_cols:
+                safe_alter('ALTER TABLE branches ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)')
+            if 'is_main' not in branch_cols:
+                safe_alter('ALTER TABLE branches ADD COLUMN is_main BOOLEAN DEFAULT FALSE')
+            if 'is_active' not in branch_cols:
+                safe_alter('ALTER TABLE branches ADD COLUMN is_active BOOLEAN DEFAULT TRUE')
+            if 'address' not in branch_cols:
+                safe_alter('ALTER TABLE branches ADD COLUMN address TEXT')
+            if 'phone' not in branch_cols:
+                safe_alter('ALTER TABLE branches ADD COLUMN phone VARCHAR(30)')
+
         # ── organisations: add extra columns BEFORE seeding org #1 ──────────────
         if 'organisations' in existing_tables:
             org_cols_early = cols('organisations')
