@@ -201,8 +201,11 @@ def _run_migrations(flask_app):
                 db.session.execute(text("""
                     INSERT INTO organisations (id, name, slug, currency, country, timezone, is_active, created_at)
                     VALUES (2, 'Platform Admin', 'platform-admin', 'GHS', 'Ghana', 'Africa/Accra', TRUE, NOW())
+                    ON CONFLICT (id) DO NOTHING
                 """))
                 db.session.commit()
+            # Reset sequence so new orgs from signup get correct IDs
+            safe_alter("SELECT setval('organisations_id_seq', (SELECT MAX(id) FROM organisations))")
 
         # ── branches: seed default branch for org 1 + org 2 ─────────────────
         if 'branches' in existing_tables:
@@ -210,14 +213,18 @@ def _run_migrations(flask_app):
                 db.session.execute(text("""
                     INSERT INTO branches (id, organisation_id, name, is_default, is_active, created_at)
                     VALUES (1, 1, 'Main Branch', TRUE, TRUE, NOW())
+                    ON CONFLICT (id) DO NOTHING
                 """))
                 db.session.commit()
             if not db.session.execute(text('SELECT COUNT(*) FROM branches WHERE organisation_id=2')).scalar():
                 db.session.execute(text("""
-                    INSERT INTO branches (organisation_id, name, is_default, is_active, created_at)
-                    VALUES (2, 'Platform Branch', TRUE, TRUE, NOW())
+                    INSERT INTO branches (id, organisation_id, name, is_default, is_active, created_at)
+                    VALUES (2, 2, 'Platform Branch', TRUE, TRUE, NOW())
+                    ON CONFLICT (id) DO NOTHING
                 """))
                 db.session.commit()
+            # Reset sequence so future auto-id inserts don't collide
+            safe_alter("SELECT setval('branches_id_seq', (SELECT MAX(id) FROM branches))")
 
         # ── plans: seed default subscription plans ─────────────────────────────
         if 'plans' in existing_tables:
