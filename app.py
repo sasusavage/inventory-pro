@@ -112,19 +112,31 @@ def _wants_json():
 
 def _seed_default_users(app):
     from models import User
+    from sqlalchemy import text, inspect as sa_inspect
     with app.app_context():
-        db.create_all()
-        if not User.query.filter_by(username='admin_pro').first():
-            admin = User(username='admin_pro', role='admin')
-            admin.set_password('adminPass2026')
-            db.session.add(admin)
-            db.session.commit()
+        # Guard: only run if the column actually exists (migrations may not have run yet)
+        try:
+            insp = sa_inspect(db.engine)
+            col_names = [c['name'] for c in insp.get_columns('users')]
+            if 'organisation_id' not in col_names:
+                return  # migrations haven't added the column yet — skip
+        except Exception:
+            return
 
-        if not User.query.filter_by(username='sales_pro').first():
-            sales = User(username='sales_pro', role='sales')
-            sales.set_password('salesPass2026')
-            db.session.add(sales)
-            db.session.commit()
+        seed_users = [
+            ('superadmin', 'super_admin', 'SuperAdmin2026!'),
+            ('admin_pro',  'admin',       'adminPass2026'),
+            ('sales_pro',  'sales',       'salesPass2026'),
+        ]
+        for username, role, password in seed_users:
+            try:
+                if not User.query.filter_by(username=username).first():
+                    u = User(username=username, role=role, organisation_id=1)
+                    u.set_password(password)
+                    db.session.add(u)
+                    db.session.commit()
+            except Exception:
+                db.session.rollback()
 
 
 if __name__ == '__main__':
