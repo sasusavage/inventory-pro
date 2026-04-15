@@ -1,7 +1,6 @@
-from app import create_app, _seed_default_users
+from app import create_app
 
 app = create_app()
-_seed_default_users(app)
 
 # ── Safe startup migrations ──────────────────────────────────────────────────
 def _run_migrations(flask_app):
@@ -285,3 +284,7 @@ def _run_migrations(flask_app):
 
 
 _run_migrations(app)
+
+# Seed default users only after migrations have run
+from app import _seed_default_users
+_seed_default_users(app)
