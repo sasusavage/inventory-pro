@@ -28,7 +28,8 @@ def login():
         session['org_id']   = user.organisation_id or 1
         ActivityLog.log('LOGIN', entity='user', entity_id=user.id, summary=f'{user.username} signed in')
         db.session.commit()
-        return jsonify({'message': 'Login successful', 'role': user.role})
+        redirect_to = '/superadmin/' if user.role == 'super_admin' else '/'
+        return jsonify({'message': 'Login successful', 'role': user.role, 'redirect': redirect_to})
     ActivityLog.log('LOGIN_FAILED', entity='user', summary=f'Failed login for "{username}"')
     db.session.commit()
     return jsonify({'error': 'Invalid credentials'}), 401

@@ -29,7 +29,27 @@
             </div>
 
             <nav style="flex: 1; overflow-y: auto;">
-                <ul class="nav-menu">
+                <!-- SUPER ADMIN SIDEBAR — shown only when role=super_admin -->
+                <ul class="nav-menu" id="nav-superadmin-menu" style="display:none;">
+                    <li class="nav-item">
+                        <a href="/superadmin/" class="nav-link" id="nav-sa-dashboard"><span class="nav-icon">📊</span>Overview</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/superadmin/tenants" class="nav-link" id="nav-sa-tenants"><span class="nav-icon">🏢</span>Tenants</a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/superadmin/domains" class="nav-link" id="nav-sa-domains"><span class="nav-icon">🌐</span>Custom Domains</a>
+                    </li>
+                    <li class="nav-item" style="margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border-subtle);">
+                        <span style="font-size:.7rem; color:var(--text-muted); padding:.25rem .75rem; text-transform:uppercase; letter-spacing:.5px;">Test Workspace</span>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/home" class="nav-link" id="nav-sa-shop"><span class="nav-icon">🧪</span>Test Features</a>
+                    </li>
+                </ul>
+
+                <!-- TENANT SIDEBAR — shown for all other roles -->
+                <ul class="nav-menu" id="nav-tenant-menu">
                     <li class="nav-item">
                         <a href="/" class="nav-link" id="nav-dashboard"><span class="nav-icon">📊</span>Dashboard</a>
                     </li>
@@ -84,12 +104,6 @@
                     <li class="nav-item admin-only">
                         <a href="/settings-page" class="nav-link" id="nav-settings"><span class="nav-icon">⚙️</span>Settings</a>
                     </li>
-                    <li class="nav-item super-admin-only" style="display:none;">
-                        <a href="/superadmin/" class="nav-link" id="nav-superadmin"><span class="nav-icon">🛡️</span>Super Admin</a>
-                    </li>
-                    <li class="nav-item super-admin-only" style="display:none;">
-                        <a href="/superadmin/domains" class="nav-link" id="nav-domains"><span class="nav-icon">🌐</span>Custom Domains</a>
-                    </li>
                 </ul>
             </nav>
 
@@ -141,22 +155,24 @@
                 const data = await res.json();
                 document.getElementById('user-role-display').textContent = (data.username || data.role).toUpperCase();
 
-                // Super admin nav
                 if (data.role === 'super_admin') {
-                    document.querySelectorAll('.super-admin-only').forEach(el => el.style.display = '');
-                }
+                    // Super admin: show admin panel sidebar, hide shop sidebar
+                    document.getElementById('nav-superadmin-menu').style.display = '';
+                    document.getElementById('nav-tenant-menu').style.display = 'none';
+                } else {
+                    // Regular tenant user: hide admin sidebar, show shop sidebar
+                    document.getElementById('nav-superadmin-menu').style.display = 'none';
+                    document.getElementById('nav-tenant-menu').style.display = '';
 
-                // Advanced RBAC Hiding (Frontend Side)
-                if (data.role !== 'admin' && data.role !== 'super_admin' && data.role !== 'owner') {
-                    // Hide entire sections marked admin-only
-                    document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
-                    
-                    // Check granular permissions if available
-                    if (data.permissions) {
-                        const perms = data.permissions;
-                        if (!perms.can_view_sales) document.getElementById('nav-sales')?.parentElement.remove();
-                        if (!perms.can_view_pos) document.getElementById('nav-pos')?.parentElement.remove();
-                        if (!perms.can_view_products) document.getElementById('nav-products')?.parentElement.remove();
+                    // Hide admin-only items for non-admin roles
+                    if (data.role !== 'admin' && data.role !== 'owner') {
+                        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+                        if (data.permissions) {
+                            const p = data.permissions;
+                            if (!p.can_view_sales)    document.getElementById('nav-sales')?.parentElement.remove();
+                            if (!p.can_view_pos)      document.getElementById('nav-pos')?.parentElement.remove();
+                            if (!p.can_view_products) document.getElementById('nav-products')?.parentElement.remove();
+                        }
                     }
                 }
             } catch (e) { 

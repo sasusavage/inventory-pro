@@ -61,7 +61,8 @@
                     })
                 });
                 if (res.ok) {
-                    window.location.href = '/';
+                    const data = await res.json();
+                    window.location.href = data.redirect || '/';
                 } else {
                     const data = await res.json();
                     errorMsg.textContent = data.error || 'Login failed. Check your credentials.';
