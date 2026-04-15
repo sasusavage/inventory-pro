@@ -153,6 +153,38 @@ def _run_migrations(flask_app):
             if 'phone' not in branch_cols:
                 safe_alter('ALTER TABLE branches ADD COLUMN phone VARCHAR(30)')
 
+        # ── plans: add columns before seeding ────────────────────────────────
+        plan_cols = cols('plans')
+        if plan_cols:
+            if 'slug' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN slug VARCHAR(60)")
+            if 'price_monthly' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN price_monthly NUMERIC(10,2) DEFAULT 0")
+            if 'max_branches' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN max_branches INTEGER DEFAULT 1")
+            if 'max_users' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN max_users INTEGER DEFAULT 5")
+            if 'max_products' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN max_products INTEGER DEFAULT 1000")
+            if 'max_customers' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN max_customers INTEGER DEFAULT 500")
+            if 'is_active' not in plan_cols:
+                safe_alter("ALTER TABLE plans ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
+
+        # ── subscriptions: add columns before seeding ─────────────────────────
+        sub_cols = cols('subscriptions')
+        if sub_cols:
+            if 'organisation_id' not in sub_cols:
+                safe_alter("ALTER TABLE subscriptions ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)")
+            if 'plan_id' not in sub_cols:
+                safe_alter("ALTER TABLE subscriptions ADD COLUMN plan_id INTEGER REFERENCES plans(id)")
+            if 'status' not in sub_cols:
+                safe_alter("ALTER TABLE subscriptions ADD COLUMN status VARCHAR(30) DEFAULT 'active'")
+            if 'current_period_start' not in sub_cols:
+                safe_alter("ALTER TABLE subscriptions ADD COLUMN current_period_start TIMESTAMP")
+            if 'current_period_end' not in sub_cols:
+                safe_alter("ALTER TABLE subscriptions ADD COLUMN current_period_end TIMESTAMP")
+
         # ── organisations: add extra columns BEFORE seeding org #1 ──────────────
         if 'organisations' in existing_tables:
             org_cols_early = cols('organisations')
