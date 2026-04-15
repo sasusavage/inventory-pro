@@ -3,9 +3,11 @@
 {% block content %}
 <header class="page-header">
     <h2 class="page-title">⚙ {{ org.name }}</h2>
-    <div style="display:flex;gap:.5rem;">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
         <a href="/superadmin/tenants" class="btn btn-secondary btn-sm">← Back</a>
         <button onclick="saveModules()" class="btn btn-primary btn-sm">Save Modules</button>
+        <button onclick="enterTenant()" class="btn btn-sm" style="background:#f59e0b;color:#000;font-weight:600;">👁️ Enter as Tenant</button>
+        <button onclick="toggleSuspend()" class="btn btn-danger btn-sm" id="suspend-btn">⏸ Suspend</button>
     </div>
 </header>
 
@@ -82,6 +84,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             </label>
         </div>`).join('');
 });
+
+async function enterTenant() {
+    if (!confirm('Enter {{ org.name }}\'s workspace? You will see their real data. Use the yellow banner to exit.')) return;
+    const res = await fetch(`/superadmin/tenants/${ORG_ID}/impersonate`, { method: 'POST' });
+    const d   = await res.json();
+    if (res.ok) { window.location.href = d.redirect || '/'; }
+    else { alert(d.error || 'Failed'); }
+}
+
+async function toggleSuspend() {
+    const res = await fetch(`/superadmin/api/tenants/${ORG_ID}/suspend`, { method: 'POST' });
+    const d   = await res.json();
+    if (res.ok) {
+        window.showToastNotification(d.message, 'success');
+        document.getElementById('suspend-btn').textContent = d.is_active ? '⏸ Suspend' : '▶ Activate';
+    } else { window.showToastNotification(d.error || 'Failed', 'error'); }
+}
 
 async function saveModules() {
     const payload = {};

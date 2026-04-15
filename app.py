@@ -123,15 +123,16 @@ def _seed_default_users(app):
         except Exception:
             return
 
+        # superadmin lives in org 2 (Platform Admin), others in org 1
         seed_users = [
-            ('superadmin', 'super_admin', 'SuperAdmin2026!'),
-            ('admin_pro',  'admin',       'adminPass2026'),
-            ('sales_pro',  'sales',       'salesPass2026'),
+            ('superadmin', 'super_admin', 'SuperAdmin2026!', 2),
+            ('admin_pro',  'admin',       'adminPass2026',   1),
+            ('sales_pro',  'sales',       'salesPass2026',   1),
         ]
-        for username, role, password in seed_users:
+        for username, role, password, org_id in seed_users:
             try:
                 if not User.query.filter_by(username=username).first():
-                    u = User(username=username, role=role, organisation_id=1)
+                    u = User(username=username, role=role, organisation_id=org_id)
                     u.set_password(password)
                     db.session.add(u)
                     db.session.commit()

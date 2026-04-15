@@ -10,7 +10,7 @@ Routes:
   GET  /superadmin/plans        — list/edit plans
 """
 from functools import wraps
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, redirect
 from models import db, Organisation, User, TenantModule, Plan, Subscription, AVAILABLE_MODULES, DEFAULT_MODULES
 
 superadmin_bp = Blueprint('superadmin', __name__, url_prefix='/superadmin')
@@ -162,6 +162,46 @@ def api_suspend_tenant(org_id):
     db.session.commit()
     state = 'activated' if org.is_active else 'suspended'
     return jsonify({'message': f'Tenant {state}', 'is_active': org.is_active})
+
+
+@superadmin_bp.route('/tenants/<int:org_id>/impersonate', methods=['POST'])
+@super_admin_required
+def impersonate_tenant(org_id):
+    """Super admin enters a tenant's workspace. Saves original session so they can exit."""
+    org = Organisation.query.get_or_404(org_id)
+    # Save the super admin's real identity so we can restore it
+    session['impersonating_org_id']    = org_id
+    session['impersonating_org_name']  = org.name
+    session['real_user_id']            = session.get('user_id')
+    session['real_username']           = session.get('username')
+    session['real_role']               = session.get('role')
+    session['real_org_id']             = session.get('org_id')
+    # Switch context to tenant's org
+    session['org_id'] = org_id
+    # Find an owner/admin user in that org to impersonate, or keep super_admin role
+    tenant_admin = User.query.filter_by(organisation_id=org_id, role='owner').first() \
+                or User.query.filter_by(organisation_id=org_id).first()
+    if tenant_admin:
+        session['user_id']  = tenant_admin.id
+        session['username'] = tenant_admin.username
+        session['role']     = tenant_admin.role
+    else:
+        session['role'] = 'admin'
+    return jsonify({'message': f'Now viewing as {org.name}', 'redirect': '/'})
+
+
+@superadmin_bp.route('/stop-impersonating')
+def stop_impersonating():
+    """Restore the super admin's real session."""
+    if session.get('real_role') == 'super_admin':
+        session['user_id']  = session.pop('real_user_id', None)
+        session['username'] = session.pop('real_username', None)
+        session['role']     = session.pop('real_role', None)
+        session['org_id']   = session.pop('real_org_id', None)
+        session.pop('impersonating_org_id',   None)
+        session.pop('impersonating_org_name', None)
+    from flask import redirect
+    return redirect('/superadmin/tenants')
 
 
 @superadmin_bp.route('/api/domains')

@@ -194,13 +194,28 @@ def _run_migrations(flask_app):
             if 'stock_adjustments' in existing_tables and 'organisation_id' in cols('stock_adjustments'):
                 safe_alter('UPDATE stock_adjustments SET organisation_id=1 WHERE organisation_id IS NULL')
 
-        # ── branches: seed default branch for org 1 ───────────────────────────
+        # ── seed org #2: Platform Admin (super admin's own workspace) ──────────
+        if 'organisations' in existing_tables:
+            exists = db.session.execute(text('SELECT COUNT(*) FROM organisations WHERE id=2')).scalar()
+            if not exists:
+                db.session.execute(text("""
+                    INSERT INTO organisations (id, name, slug, currency, country, timezone, is_active, created_at)
+                    VALUES (2, 'Platform Admin', 'platform-admin', 'GHS', 'Ghana', 'Africa/Accra', TRUE, NOW())
+                """))
+                db.session.commit()
+
+        # ── branches: seed default branch for org 1 + org 2 ─────────────────
         if 'branches' in existing_tables:
-            result = db.session.execute(text('SELECT COUNT(*) FROM branches')).scalar()
-            if result == 0:
+            if not db.session.execute(text('SELECT COUNT(*) FROM branches WHERE organisation_id=1')).scalar():
                 db.session.execute(text("""
                     INSERT INTO branches (id, organisation_id, name, is_default, is_active, created_at)
                     VALUES (1, 1, 'Main Branch', TRUE, TRUE, NOW())
+                """))
+                db.session.commit()
+            if not db.session.execute(text('SELECT COUNT(*) FROM branches WHERE organisation_id=2')).scalar():
+                db.session.execute(text("""
+                    INSERT INTO branches (organisation_id, name, is_default, is_active, created_at)
+                    VALUES (2, 'Platform Branch', TRUE, TRUE, NOW())
                 """))
                 db.session.commit()
 
@@ -235,18 +250,21 @@ def _run_migrations(flask_app):
                 """))
                 db.session.commit()
 
-        # ── tenant_modules: seed default enabled modules for org 1 ─────────────
+        # ── tenant_modules: seed modules for org 1 (defaults) + org 2 (all on) ─
         if 'tenant_modules' in existing_tables:
-            result = db.session.execute(text('SELECT COUNT(*) FROM tenant_modules WHERE organisation_id=1')).scalar()
-            if result == 0:
-                for module in AVAILABLE_MODULES:
-                    enabled = module in DEFAULT_MODULES
-                    db.session.execute(text("""
-                        INSERT INTO tenant_modules (organisation_id, module, is_enabled)
-                        VALUES (:oid, :mod, :en)
-                        ON CONFLICT DO NOTHING
-                    """), {'oid': 1, 'mod': module, 'en': enabled})
-                db.session.commit()
+            for org_id, all_on in [(1, False), (2, True)]:
+                result = db.session.execute(
+                    text('SELECT COUNT(*) FROM tenant_modules WHERE organisation_id=:o'), {'o': org_id}
+                ).scalar()
+                if result == 0:
+                    for module in AVAILABLE_MODULES:
+                        enabled = True if all_on else (module in DEFAULT_MODULES)
+                        db.session.execute(text("""
+                            INSERT INTO tenant_modules (organisation_id, module, is_enabled)
+                            VALUES (:oid, :mod, :en)
+                            ON CONFLICT DO NOTHING
+                        """), {'oid': org_id, 'mod': module, 'en': enabled})
+            db.session.commit()
 
         # ── app_settings: ensure org 1 has a settings row ─────────────────────
         if 'app_settings' in existing_tables:

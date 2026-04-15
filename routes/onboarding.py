@@ -73,7 +73,7 @@ def signup():
         branch = Branch(
             organisation_id=org.id,
             name='Main Branch',
-            is_main=True,
+            is_default=True,
             is_active=True,
         )
         db.session.add(branch)
