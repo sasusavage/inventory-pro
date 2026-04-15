@@ -10,12 +10,16 @@ def _run_migrations(flask_app):
 
         # Drop SaaS infrastructure tables so they are recreated with the
         # correct schema. These hold only seed data, never real user data.
-        for _t in ('subscriptions', 'tenant_modules', 'plans', 'branches'):
-            try:
-                db.session.execute(text(f'DROP TABLE IF EXISTS {_t} CASCADE'))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
+        # Use a raw connection with autocommit to avoid transaction conflicts.
+        try:
+            with db.engine.connect() as _conn:
+                _conn.execute(text('SET session_replication_role = replica'))
+                for _t in ('billing_records', 'subscriptions', 'tenant_modules', 'plans', 'branches'):
+                    _conn.execute(text(f'DROP TABLE IF EXISTS {_t} CASCADE'))
+                _conn.execute(text('SET session_replication_role = DEFAULT'))
+                _conn.commit()
+        except Exception:
+            pass
 
         # Create all tables fresh (new ones) or leave existing ones untouched
         db.create_all()
@@ -195,7 +199,7 @@ def _run_migrations(flask_app):
             result = db.session.execute(text('SELECT COUNT(*) FROM branches')).scalar()
             if result == 0:
                 db.session.execute(text("""
-                    INSERT INTO branches (id, organisation_id, name, is_main, is_active, created_at)
+                    INSERT INTO branches (id, organisation_id, name, is_default, is_active, created_at)
                     VALUES (1, 1, 'Main Branch', TRUE, TRUE, NOW())
                 """))
                 db.session.commit()
@@ -204,27 +208,30 @@ def _run_migrations(flask_app):
         if 'plans' in existing_tables:
             result = db.session.execute(text('SELECT COUNT(*) FROM plans')).scalar()
             if result == 0:
-                plans = [
-                    (1, 'Starter',    'starter',    9.99,  1,  1,   1000,  5),
-                    (2, 'Growth',     'growth',    29.99,  3,  5,  10000, 20),
-                    (3, 'Pro',        'pro',       79.99, 10, 20, 100000, 50),
-                    (4, 'Enterprise', 'enterprise',199.99,999,999,9999999,999),
+                plans_data = [
+                    # id, name, display_name,       price_mo, price_yr, max_br, max_staff, max_prod, trial, sort
+                    (1, 'starter',    'Starter',     59.0,   590.0,  1,   2,   500,  14, 1),
+                    (2, 'growth',     'Growth',     179.0,  1790.0,  3,  10,  5000,  14, 2),
+                    (3, 'pro',        'Pro',         449.0,  4490.0, 10,  30, 50000,  14, 3),
+                    (4, 'enterprise', 'Enterprise',    0.0,     0.0,-1,  -1,    -1,  30, 4),
                 ]
-                for p in plans:
+                for p in plans_data:
                     db.session.execute(text("""
-                        INSERT INTO plans (id, name, slug, price_monthly, max_branches, max_users, max_products, max_customers, is_active)
-                        VALUES (:id, :name, :slug, :price, :mb, :mu, :mp, :mc, TRUE)
-                    """), {'id': p[0], 'name': p[1], 'slug': p[2], 'price': p[3],
-                           'mb': p[4], 'mu': p[5], 'mp': p[6], 'mc': p[7]})
+                        INSERT INTO plans (id, name, display_name, price_monthly, price_yearly,
+                                          max_branches, max_staff, max_products, trial_days, sort_order, is_active)
+                        VALUES (:id, :name, :dn, :pm, :py, :mb, :ms, :mp, :td, :so, TRUE)
+                    """), {'id': p[0], 'name': p[1], 'dn': p[2], 'pm': p[3], 'py': p[4],
+                           'mb': p[5], 'ms': p[6], 'mp': p[7], 'td': p[8], 'so': p[9]})
                 db.session.commit()
 
-        # ── subscriptions: seed a Pro subscription for org 1 ──────────────────
+        # ── subscriptions: seed an active Pro subscription for org 1 ──────────
         if 'subscriptions' in existing_tables:
             result = db.session.execute(text('SELECT COUNT(*) FROM subscriptions WHERE organisation_id=1')).scalar()
             if result == 0:
                 db.session.execute(text("""
-                    INSERT INTO subscriptions (organisation_id, plan_id, status, current_period_start, current_period_end)
-                    VALUES (1, 3, 'active', NOW(), NOW() + INTERVAL '1 year')
+                    INSERT INTO subscriptions (organisation_id, plan_id, status,
+                                              billing_cycle, started_at, expires_at)
+                    VALUES (1, 3, 'active', 'monthly', NOW(), NOW() + INTERVAL '1 year')
                 """))
                 db.session.commit()
 
