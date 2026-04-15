@@ -139,6 +139,22 @@ def _run_migrations(flask_app):
         if sadj_cols and 'organisation_id' not in sadj_cols:
             safe_alter('ALTER TABLE stock_adjustments ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)')
 
+        # ── organisations: add extra columns BEFORE seeding org #1 ──────────────
+        if 'organisations' in existing_tables:
+            org_cols_early = cols('organisations')
+            if 'custom_domain' not in org_cols_early:
+                safe_alter('ALTER TABLE organisations ADD COLUMN custom_domain VARCHAR(255) UNIQUE')
+            if 'domain_verified' not in org_cols_early:
+                safe_alter('ALTER TABLE organisations ADD COLUMN domain_verified BOOLEAN DEFAULT FALSE')
+            if 'domain_verified_at' not in org_cols_early:
+                safe_alter('ALTER TABLE organisations ADD COLUMN domain_verified_at TIMESTAMP')
+            if 'domain_requested_at' not in org_cols_early:
+                safe_alter('ALTER TABLE organisations ADD COLUMN domain_requested_at TIMESTAMP')
+            if 'country' not in org_cols_early:
+                safe_alter("ALTER TABLE organisations ADD COLUMN country VARCHAR(60)")
+            if 'timezone' not in org_cols_early:
+                safe_alter("ALTER TABLE organisations ADD COLUMN timezone VARCHAR(60) DEFAULT 'Africa/Accra'")
+
         # ═══════════════════════════════════════════════════════════════════════
         # Seed Tenant #1 — existing shop becomes the first organisation
         # ═══════════════════════════════════════════════════════════════════════
@@ -220,20 +236,7 @@ def _run_migrations(flask_app):
             # Migrate any settings without org_id to org 1
             safe_alter('UPDATE app_settings SET organisation_id=1 WHERE organisation_id IS NULL')
 
-        # ── organisations: domain fields ──────────────────────────────────────
-        org_cols = cols('organisations')
-        if 'custom_domain' not in org_cols:
-            safe_alter('ALTER TABLE organisations ADD COLUMN custom_domain VARCHAR(255) UNIQUE')
-        if 'domain_verified' not in org_cols:
-            safe_alter('ALTER TABLE organisations ADD COLUMN domain_verified BOOLEAN DEFAULT FALSE')
-        if 'domain_verified_at' not in org_cols:
-            safe_alter('ALTER TABLE organisations ADD COLUMN domain_verified_at TIMESTAMP')
-        if 'domain_requested_at' not in org_cols:
-            safe_alter('ALTER TABLE organisations ADD COLUMN domain_requested_at TIMESTAMP')
-        if 'country' not in org_cols:
-            safe_alter("ALTER TABLE organisations ADD COLUMN country VARCHAR(60)")
-        if 'timezone' not in org_cols:
-            safe_alter("ALTER TABLE organisations ADD COLUMN timezone VARCHAR(60) DEFAULT 'Africa/Accra'")
+        # (organisations extra columns are added earlier, before seed)
 
         # ── unique constraint migrations (PostgreSQL only — skip on SQLite) ────
         try:
