@@ -266,6 +266,13 @@ def _run_migrations(flask_app):
                         """), {'oid': org_id, 'mod': module, 'en': enabled})
             db.session.commit()
 
+        # ── fix superadmin user: must belong to org 2, not org 1 ─────────────
+        if 'users' in existing_tables and 'organisation_id' in cols('users'):
+            safe_alter("""
+                UPDATE users SET organisation_id=2
+                WHERE username='superadmin' AND (organisation_id=1 OR organisation_id IS NULL)
+            """)
+
         # ── app_settings: ensure org 1 has a settings row ─────────────────────
         if 'app_settings' in existing_tables:
             # Migrate any settings without org_id to org 1
