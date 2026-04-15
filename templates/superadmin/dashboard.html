@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+{% block title %}Super Admin — InventoryPro{% endblock %}
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">🛡️ Super Admin Dashboard</h2>
+    <a href="/superadmin/tenants" class="btn btn-primary btn-sm">Manage Tenants</a>
+</header>
+
+<div id="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem;">
+    <div class="card stat-card"><h4>Total Tenants</h4><p id="s-total">—</p></div>
+    <div class="card stat-card"><h4>Active Tenants</h4><p id="s-active">—</p></div>
+    <div class="card stat-card"><h4>Total Users</h4><p id="s-users">—</p></div>
+</div>
+
+<div class="card" style="padding:1.25rem;">
+    <h3 style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">PLAN DISTRIBUTION</h3>
+    <div id="plan-dist"></div>
+</div>
+
+<style>
+.stat-card { text-align:center; padding:1.25rem; }
+.stat-card h4 { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:.4rem; }
+.stat-card p  { font-size:1.8rem; font-weight:800; }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const d = await fetch('/superadmin/api/stats').then(r => r.json());
+    document.getElementById('s-total').textContent  = d.total_tenants;
+    document.getElementById('s-active').textContent = d.active_tenants;
+    document.getElementById('s-users').textContent  = d.total_users;
+
+    const pd = document.getElementById('plan-dist');
+    if (!d.plan_distribution?.length) { pd.innerHTML = '<p style="color:var(--text-muted);">No active subscriptions yet.</p>'; return; }
+    pd.innerHTML = d.plan_distribution.map(r =>
+        `<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed var(--border-subtle);">
+            <span>${r.plan}</span><strong>${r.count}</strong>
+        </div>`
+    ).join('');
+});
+</script>
+{% endblock %}

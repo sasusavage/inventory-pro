@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, g
 from models import db, Supplier, SupplierPayment
 from decorators import login_required
 
@@ -14,8 +14,9 @@ def suppliers_page():
 @suppliers_bp.route('/suppliers', methods=['GET'])
 @login_required
 def list_suppliers():
+    org_id = g.org_id
     search = request.args.get('search', '').strip()
-    query = Supplier.query
+    query = Supplier.query.filter_by(organisation_id=org_id)
 
     if search:
         query = query.filter(
@@ -43,6 +44,7 @@ def create_supplier():
         supplier = Supplier(
             name=data['name'].strip(),
             phone=data['phone'].strip(),
+            organisation_id=g.org_id,
         )
         db.session.add(supplier)
         db.session.commit()
@@ -55,7 +57,9 @@ def create_supplier():
 @suppliers_bp.route('/supplier-payments', methods=['GET'])
 @login_required
 def list_supplier_payments():
-    payments = SupplierPayment.query.order_by(SupplierPayment.payment_date.desc()).all()
+    payments = (SupplierPayment.query
+                .filter_by(organisation_id=g.org_id)
+                .order_by(SupplierPayment.payment_date.desc()).all())
     return jsonify([{
         'id': p.id,
         'supplier_name': p.supplier.name,
@@ -88,6 +92,7 @@ def create_supplier_payment():
             supplier_id=data['supplier_id'],
             amount_paid=amount,
             description=(data.get('description') or '').strip() or None,
+            organisation_id=g.org_id,
         )
         db.session.add(payment)
         db.session.commit()

@@ -1,10 +1,10 @@
 import csv
 import io
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, jsonify, session, Response
+from flask import Blueprint, render_template, request, jsonify, session, Response, g
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
-from models import db, Sale, SaleItem, Customer, Product, StockMovement, Expense, AppSetting
+from models import db, Sale, SaleItem, Customer, Product, Expense, AppSetting
 from decorators import login_required
 
 reports_bp = Blueprint('reports', __name__)
@@ -14,6 +14,7 @@ reports_bp = Blueprint('reports', __name__)
 @login_required
 def report_debtors():
     # Efficient aggregate query — no N+1 loop
+    org_id = g.org_id
     rows = (
         db.session.query(
             Customer.id,
@@ -23,7 +24,7 @@ def report_debtors():
             func.sum(Sale.balance_due).label('total_debt'),
         )
         .join(Sale, Sale.customer_id == Customer.id)
-        .filter(Sale.balance_due > 0)
+        .filter(Sale.balance_due > 0, Sale.organisation_id == org_id)
         .group_by(Customer.id, Customer.full_name, Customer.phone, Customer.email)
         .having(func.sum(Sale.balance_due) > 0)
         .order_by(func.sum(Sale.balance_due).desc())
@@ -46,7 +47,8 @@ def report_profit():
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
 
-    query = SaleItem.query.filter_by(status='Active').join(Sale)
+    org_id = g.org_id
+    query = SaleItem.query.filter_by(status='Active').join(Sale).filter(Sale.organisation_id == org_id)
 
     if date_from:
         try:
@@ -62,7 +64,7 @@ def report_profit():
     result = db.session.query(
         func.sum(SaleItem.subtotal).label('total_rev'),
         func.sum(SaleItem.subtotal - SaleItem.cost_price_at_sale * SaleItem.quantity).label('gross_profit'),
-    ).filter(SaleItem.status == 'Active').join(Sale)
+    ).filter(SaleItem.status == 'Active').join(Sale).filter(Sale.organisation_id == org_id)
 
     if date_from:
         try:
@@ -120,11 +122,12 @@ def report_pnl():
         try: dt = datetime.fromisoformat(date_to + 'T23:59:59')
         except ValueError: pass
 
+    org_id = g.org_id
     # Revenue + COGS from sale items
     sales_q = db.session.query(
         func.coalesce(func.sum(SaleItem.subtotal), 0).label('revenue'),
         func.coalesce(func.sum(SaleItem.cost_price_at_sale * SaleItem.quantity), 0).label('cogs'),
-    ).join(Sale, Sale.id == SaleItem.sale_id).filter(SaleItem.status == 'Active')
+    ).join(Sale, Sale.id == SaleItem.sale_id).filter(SaleItem.status == 'Active', Sale.organisation_id == org_id)
     if df: sales_q = sales_q.filter(Sale.sale_date >= df)
     if dt: sales_q = sales_q.filter(Sale.sale_date <= dt)
     sr = sales_q.one()
@@ -135,7 +138,7 @@ def report_pnl():
     # Expenses
     exp_q = db.session.query(
         Expense.category, func.sum(Expense.amount).label('amt')
-    )
+    ).filter(Expense.organisation_id == org_id)
     if df: exp_q = exp_q.filter(Expense.expense_date >= df)
     if dt: exp_q = exp_q.filter(Expense.expense_date <= dt)
     exp_rows = exp_q.group_by(Expense.category).all()
@@ -174,6 +177,7 @@ def report_top_customers():
     days = min(int(request.args.get('days', 90) or 90), 3650)
     since = datetime.utcnow() - timedelta(days=days)
 
+    org_id = g.org_id
     rows = (
         db.session.query(
             Customer.id,
@@ -184,7 +188,7 @@ def report_top_customers():
             func.sum(Sale.balance_due).label('outstanding'),
         )
         .join(Sale, Sale.customer_id == Customer.id)
-        .filter(Sale.sale_date >= since)
+        .filter(Sale.sale_date >= since, Sale.organisation_id == org_id)
         .group_by(Customer.id, Customer.full_name, Customer.phone)
         .order_by(func.sum(Sale.total_amount).desc())
         .limit(20)
@@ -214,7 +218,7 @@ def monthly_trends():
     sales = db.session.query(
         func.date_trunc('month', Sale.sale_date).label('month'),
         func.sum(Sale.total_amount).label('total'),
-    ).filter(Sale.sale_date >= six_months_ago).group_by('month').order_by('month').all()
+    ).filter(Sale.sale_date >= six_months_ago, Sale.organisation_id == g.org_id).group_by('month').order_by('month').all()
 
     return jsonify([{
         'month': row.month.strftime('%Y-%m'),
@@ -228,12 +232,12 @@ def monthly_trends():
 @login_required
 def export_sales_csv():
     if session.get('role') == 'admin':
-        sales = Sale.query.options(
+        sales = Sale.query.filter_by(organisation_id=g.org_id).options(
             joinedload(Sale.customer),
             joinedload(Sale.items).joinedload(SaleItem.product),
         ).order_by(Sale.sale_date.desc()).all()
     else:
-        sales = Sale.query.filter_by(user_id=session.get('user_id')).options(
+        sales = Sale.query.filter_by(organisation_id=g.org_id, user_id=session.get('user_id')).options(
             joinedload(Sale.customer),
             joinedload(Sale.items).joinedload(SaleItem.product),
         ).order_by(Sale.sale_date.desc()).all()
@@ -265,7 +269,7 @@ def export_sales_csv():
 @reports_bp.route('/export/products.csv')
 @login_required
 def export_products_csv():
-    products = Product.query.order_by(Product.name).all()
+    products = Product.query.filter_by(organisation_id=g.org_id).order_by(Product.name).all()
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -300,6 +304,7 @@ def export_customers_csv():
             Customer.created_at,
             func.coalesce(func.sum(Sale.balance_due), 0).label('total_debt'),
         )
+        .filter(Customer.organisation_id == g.org_id)
         .outerjoin(Sale, Sale.customer_id == Customer.id)
         .group_by(Customer.id)
         .order_by(Customer.full_name)
@@ -335,7 +340,7 @@ def export_debtors_csv():
             func.sum(Sale.balance_due).label('total_debt'),
         )
         .join(Sale, Sale.customer_id == Customer.id)
-        .filter(Sale.balance_due > 0)
+        .filter(Sale.balance_due > 0, Sale.organisation_id == g.org_id)
         .group_by(Customer.id, Customer.full_name, Customer.phone, Customer.email)
         .having(func.sum(Sale.balance_due) > 0)
         .order_by(func.sum(Sale.balance_due).desc())

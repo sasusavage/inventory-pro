@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, g
 from sqlalchemy.orm import joinedload
 from models import db, Customer, Sale, SaleItem, AppSetting, LoyaltyPoint
 from decorators import login_required
@@ -15,8 +15,9 @@ def customers_page():
 @customers_bp.route('/customers', methods=['GET'])
 @login_required
 def list_customers():
+    org_id = g.org_id
     search = request.args.get('search', '').strip()
-    query = Customer.query
+    query = Customer.query.filter_by(organisation_id=org_id)
 
     if search:
         query = query.filter(
@@ -59,8 +60,9 @@ def create_customer():
     if missing:
         return jsonify({'error': f'Missing fields: {", ".join(missing)}'}), 400
 
+    org_id = g.org_id
     phone = data['phone'].strip()
-    if Customer.query.filter_by(phone=phone).first():
+    if Customer.query.filter_by(phone=phone, organisation_id=org_id).first():
         return jsonify({'error': 'A customer with this phone number already exists'}), 409
 
     try:
@@ -69,6 +71,7 @@ def create_customer():
             phone=phone,
             email=(data.get('email') or '').strip() or None,
             address=(data.get('address') or '').strip() or None,
+            organisation_id=org_id,
         )
         db.session.add(customer)
         db.session.commit()
@@ -81,7 +84,7 @@ def create_customer():
 @customers_bp.route('/customers/<int:customer_id>', methods=['PUT'])
 @login_required
 def update_customer(customer_id):
-    customer = Customer.query.get_or_404(customer_id)
+    customer = Customer.query.filter_by(id=customer_id, organisation_id=g.org_id).first_or_404()
     data = request.json or {}
 
     try:
@@ -89,7 +92,7 @@ def update_customer(customer_id):
             customer.full_name = data['full_name'].strip()
         if 'phone' in data:
             phone = data['phone'].strip()
-            existing = Customer.query.filter_by(phone=phone).first()
+            existing = Customer.query.filter_by(phone=phone, organisation_id=g.org_id).first()
             if existing and existing.id != customer_id:
                 return jsonify({'error': 'Phone number already in use'}), 409
             customer.phone = phone
@@ -109,7 +112,7 @@ def update_customer(customer_id):
 @login_required
 def customer_statement(customer_id):
     """Printable statement of account for a customer."""
-    customer = Customer.query.get_or_404(customer_id)
+    customer = Customer.query.filter_by(id=customer_id, organisation_id=g.org_id).first_or_404()
 
     date_from = request.args.get('from', '').strip()
     date_to   = request.args.get('to', '').strip()
@@ -166,10 +169,10 @@ def customer_statement(customer_id):
 @login_required
 def customer_outstanding_sales(customer_id):
     """Return all unpaid / partially-paid sales for a customer, used by the Pay Balance modal."""
-    customer = Customer.query.get_or_404(customer_id)
+    customer = Customer.query.filter_by(id=customer_id, organisation_id=g.org_id).first_or_404()
     sales = (
         Sale.query
-        .filter(Sale.customer_id == customer_id, Sale.balance_due > 0)
+        .filter(Sale.customer_id == customer_id, Sale.organisation_id == g.org_id, Sale.balance_due > 0)
         .order_by(Sale.sale_date.desc())
         .all()
     )

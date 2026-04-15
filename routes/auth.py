@@ -1,5 +1,5 @@
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
-from models import db, User, ActivityLog
+from flask import Blueprint, render_template, request, jsonify, session
+from models import db, User, ActivityLog, TenantModule
 from extensions import limiter
 
 auth_bp = Blueprint('auth', __name__)
@@ -22,9 +22,10 @@ def login():
 
     user = User.query.filter_by(username=username).first()
     if user and user.check_password(password):
-        session['user_id'] = user.id
+        session['user_id']  = user.id
         session['username'] = user.username
-        session['role'] = user.role
+        session['role']     = user.role
+        session['org_id']   = user.organisation_id or 1
         ActivityLog.log('LOGIN', entity='user', entity_id=user.id, summary=f'{user.username} signed in')
         db.session.commit()
         return jsonify({'message': 'Login successful', 'role': user.role})
@@ -48,10 +49,14 @@ def check_auth():
     if 'user_id' in session:
         user = User.query.get(session['user_id'])
         if user:
+            org_id = session.get('org_id', 1)
+            enabled_modules = list(TenantModule.enabled_set(org_id))
             return jsonify({
                 'authenticated': True,
                 'role': user.role,
                 'username': user.username,
+                'org_id': org_id,
+                'enabled_modules': enabled_modules,
                 'permissions': {
                     'can_view_dashboard': user.can_view_dashboard,
                     'can_view_pos': user.can_view_pos,

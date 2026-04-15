@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:\\\\Users\\\\DeLL\\\\Downloads\\\\inventort\" -type f \\\\\\( -name \"*.py\" -o -name \"*.html\" -o -name \"*.css\" \\\\\\) -exec wc -l {} +)",
+      "Bash(python -c \"from app import create_app; app = create_app\\(\\); print\\('OK - all blueprints loaded'\\)\")",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"from app import create_app; app = create_app\\(\\); app.app_context\\(\\).push\\(\\); from models import db; db.create_all\\(\\); print\\('OK'\\)\")",
+      "Bash(python -c \"from app import create_app; app = create_app\\(\\); print\\('OK', len\\(app.blueprints\\), 'blueprints'\\)\")"
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, render_template, request, jsonify, session, current_app
+from flask import Blueprint, render_template, request, jsonify, session, current_app, g
 from werkzeug.utils import secure_filename
 from models import db, Product, ActivityLog
 from decorators import login_required
@@ -17,12 +17,13 @@ def products_page():
 @products_bp.route('/products', methods=['GET'])
 @login_required
 def list_products():
+    org_id = g.org_id
     search = request.args.get('search', '').strip()
     category_id = request.args.get('category_id', type=int)
-    query = Product.query
+    query = Product.query.filter_by(organisation_id=org_id)
 
     if search:
-        query = query.filter(Product.name.ilike(f'%{search}%') | Product.sku.ilike(f'%{search}%'))
+        query = query.filter(Product.name.ilike(f'%{search}%') | Product.sku.ilike(f'%{search}%') | Product.barcode.ilike(f'%{search}%'))
     if category_id:
         query = query.filter(Product.category_id == category_id)
 
@@ -78,7 +79,8 @@ def create_product():
     if cost_price < 0 or selling_price < 0 or quantity < 0:
         return jsonify({'error': 'Prices and quantity must be non-negative'}), 400
 
-    existing = Product.query.filter_by(sku=data['sku'].strip()).first()
+    org_id = g.org_id
+    existing = Product.query.filter_by(sku=data['sku'].strip(), organisation_id=org_id).first()
     if existing:
         return jsonify({'error': 'SKU already exists'}), 409
 
@@ -92,6 +94,7 @@ def create_product():
             quantity_in_stock=quantity,
             min_stock_level=min_stock,
             image_url=data.get('image_url') or None,
+            organisation_id=org_id,
         )
         db.session.add(product)
         db.session.flush()
@@ -116,7 +119,7 @@ def update_product(product_id):
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    product = Product.query.get_or_404(product_id)
+    product = Product.query.filter_by(id=product_id, organisation_id=g.org_id).first_or_404()
     data = request.json or {}
 
     try:
@@ -155,7 +158,7 @@ def delete_product(product_id):
     if session.get('role') != 'admin':
         return jsonify({'error': 'Unauthorized'}), 403
 
-    product = Product.query.get_or_404(product_id)
+    product = Product.query.filter_by(id=product_id, organisation_id=g.org_id).first_or_404()
     try:
         name_snapshot = product.name
         sku_snapshot = product.sku
@@ -223,12 +226,12 @@ def bulk_products():
 
     try:
         if action == 'delete':
-            Product.query.filter(Product.id.in_(product_ids)).delete(synchronize_session=False)
+            Product.query.filter(Product.id.in_(product_ids), Product.organisation_id == g.org_id).delete(synchronize_session=False)
         elif action == 'update_price':
             new_price = float(data.get('new_selling_price', 0))
             if new_price < 0:
                 return jsonify({'error': 'Price must be non-negative'}), 400
-            Product.query.filter(Product.id.in_(product_ids)).update(
+            Product.query.filter(Product.id.in_(product_ids), Product.organisation_id == g.org_id).update(
                 {Product.selling_price: new_price}, synchronize_session=False
             )
         else:
@@ -245,7 +248,7 @@ def bulk_products():
 
 @products_bp.route('/check-product/<sku>', methods=['GET'])
 def check_product(sku):
-    product = Product.query.filter_by(sku=sku).first()
+    product = Product.query.filter_by(sku=sku, organisation_id=g.org_id).first()
     return jsonify({'exists': product is not None})
 
 

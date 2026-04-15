@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, g
 from models import db, Category, Product
 from decorators import login_required, admin_required
 
@@ -15,7 +15,7 @@ def categories_page():
 @categories_bp.route('/api/categories', methods=['GET'])
 @login_required
 def list_categories():
-    cats = Category.query.order_by(Category.name).all()
+    cats = Category.query.filter_by(organisation_id=g.org_id).order_by(Category.name).all()
     return jsonify([{
         'id': c.id,
         'name': c.name,
@@ -31,9 +31,9 @@ def create_category():
     name = (data.get('name') or '').strip()
     if not name:
         return jsonify({'error': 'Name required'}), 400
-    if Category.query.filter_by(name=name).first():
+    if Category.query.filter_by(name=name, organisation_id=g.org_id).first():
         return jsonify({'error': 'Category already exists'}), 409
-    cat = Category(name=name, color=data.get('color', '#4f46e5'))
+    cat = Category(name=name, color=data.get('color', '#4f46e5'), organisation_id=g.org_id)
     db.session.add(cat)
     db.session.commit()
     return jsonify({'id': cat.id, 'name': cat.name, 'color': cat.color}), 201
@@ -42,7 +42,7 @@ def create_category():
 @categories_bp.route('/api/categories/<int:cat_id>', methods=['PUT'])
 @admin_required
 def update_category(cat_id):
-    cat = Category.query.get_or_404(cat_id)
+    cat = Category.query.filter_by(id=cat_id, organisation_id=g.org_id).first_or_404()
     data = request.json or {}
     if 'name' in data:
         cat.name = data['name'].strip()
@@ -55,9 +55,8 @@ def update_category(cat_id):
 @categories_bp.route('/api/categories/<int:cat_id>', methods=['DELETE'])
 @admin_required
 def delete_category(cat_id):
-    cat = Category.query.get_or_404(cat_id)
-    # Unlink products
-    Product.query.filter_by(category_id=cat_id).update({'category_id': None})
+    cat = Category.query.filter_by(id=cat_id, organisation_id=g.org_id).first_or_404()
+    Product.query.filter_by(category_id=cat_id, organisation_id=g.org_id).update({'category_id': None})
     db.session.delete(cat)
     db.session.commit()
     return jsonify({'message': 'Deleted'})

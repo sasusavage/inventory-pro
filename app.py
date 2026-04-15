@@ -21,6 +21,10 @@ def create_app(config=None):
     db.init_app(app)
     limiter.init_app(app)
 
+    # Multi-tenant org context (sets g.org_id, g.enabled_modules on every request)
+    from org_context import init_org_context
+    init_org_context(app)
+
     # Register blueprints
     from routes.auth import auth_bp
     from routes.dashboard import dashboard_bp
@@ -40,6 +44,8 @@ def create_app(config=None):
     from routes.stock_adjustments import stock_adj_bp
     from routes.loyalty import loyalty_bp
     from routes.activity import activity_bp
+    from routes.onboarding import onboarding_bp
+    from routes.superadmin import superadmin_bp
     from telegram_bot import bot_bp
 
     for bp in (
@@ -47,7 +53,8 @@ def create_app(config=None):
         customers_bp, suppliers_bp, purchase_orders_bp,
         refunds_bp, reports_bp, users_bp, settings_bp,
         ai_bp, analytics_bp, categories_bp, expenses_bp,
-        stock_adj_bp, loyalty_bp, activity_bp, bot_bp,
+        stock_adj_bp, loyalty_bp, activity_bp, onboarding_bp,
+        superadmin_bp, bot_bp,
     ):
         app.register_blueprint(bp)
 
@@ -57,6 +64,20 @@ def create_app(config=None):
         init_scheduler(app)
     except Exception as _sched_err:
         app.logger.warning(f"Scheduler not started: {_sched_err}")
+
+    # ── PWA: serve sw.js with correct Service-Worker-Allowed scope header ────
+    import os as _os
+    from flask import send_from_directory, make_response as _mkr
+
+    @app.route('/sw.js')
+    def service_worker():
+        resp = _mkr(send_from_directory(
+            _os.path.join(app.root_path, 'static'), 'sw.js',
+            mimetype='application/javascript'
+        ))
+        resp.headers['Service-Worker-Allowed'] = '/'
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
 
     # ── Error handlers ───────────────────────────────────────────────────────
     @app.errorhandler(404)

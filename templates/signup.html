@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Your Store - InventoryPro</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg-base); padding:1rem; }
+        .signup-card { background:var(--bg-elevated); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); padding:2rem; width:100%; max-width:440px; }
+        .brand { text-align:center; margin-bottom:1.5rem; }
+        .brand h1 { font-size:1.5rem; font-weight:800; }
+        .brand p { font-size:0.85rem; color:var(--text-muted); margin-top:0.25rem; }
+        .form-row { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; }
+        .field-error { color:#dc2626; font-size:0.75rem; margin-top:0.2rem; }
+        .divider { text-align:center; color:var(--text-muted); font-size:0.8rem; margin:1rem 0; }
+        .login-link { text-align:center; font-size:0.85rem; margin-top:1rem; color:var(--text-muted); }
+        .login-link a { color:var(--accent-primary); text-decoration:none; }
+        @media(max-width:480px) { .form-row { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<div class="signup-card">
+    <div class="brand">
+        <span style="font-size:2rem;">📦</span>
+        <h1>Create Your Store</h1>
+        <p>Set up your InventoryPro account in seconds</p>
+    </div>
+
+    <form id="signup-form" novalidate>
+        <div class="form-group">
+            <label>Store Name <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="store_name" class="form-control" placeholder="e.g. Kofi's Electronics" autocomplete="organization">
+            <div class="field-error" id="err-store_name"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Your Name</label>
+            <input type="text" id="owner_name" class="form-control" placeholder="Full name" autocomplete="name">
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Currency</label>
+                <select id="currency" class="form-control">
+                    <option value="GHS" selected>GHS — Ghana Cedi</option>
+                    <option value="USD">USD — US Dollar</option>
+                    <option value="NGN">NGN — Naira</option>
+                    <option value="KES">KES — Kenyan Shilling</option>
+                    <option value="ZAR">ZAR — Rand</option>
+                    <option value="GBP">GBP — British Pound</option>
+                    <option value="EUR">EUR — Euro</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Country</label>
+                <input type="text" id="country" class="form-control" placeholder="Ghana" value="Ghana">
+            </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border-subtle); margin:1rem 0; padding-top:1rem;">
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:0.75rem;">Create your login credentials</p>
+        </div>
+
+        <div class="form-group">
+            <label>Username <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="username" class="form-control" placeholder="e.g. kofi_admin" autocomplete="username">
+            <div class="field-error" id="err-username"></div>
+        </div>
+
+        <div class="form-group">
+            <label>Password <span style="color:#dc2626;">*</span></label>
+            <input type="password" id="password" class="form-control" placeholder="At least 6 characters" autocomplete="new-password">
+            <div class="field-error" id="err-password"></div>
+        </div>
+
+        <div id="form-error" class="field-error" style="margin-bottom:0.5rem;"></div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:0.5rem;" id="submit-btn">
+            Create My Store
+        </button>
+    </form>
+
+    <div class="login-link">
+        Already have an account? <a href="/login-page">Sign in</a>
+    </div>
+</div>
+
+<script>
+document.getElementById('signup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearErrors();
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    const payload = {
+        store_name:  document.getElementById('store_name').value.trim(),
+        owner_name:  document.getElementById('owner_name').value.trim(),
+        username:    document.getElementById('username').value.trim().toLowerCase(),
+        password:    document.getElementById('password').value,
+        currency:    document.getElementById('currency').value,
+        country:     document.getElementById('country').value.trim(),
+    };
+
+    try {
+        const res  = await fetch('/signup', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const data = await res.json();
+
+        if (res.ok) {
+            window.location.href = data.redirect || '/';
+            return;
+        }
+
+        if (data.errors) {
+            Object.entries(data.errors).forEach(([k, v]) => {
+                const el = document.getElementById(`err-${k}`);
+                if (el) el.textContent = v;
+            });
+        } else {
+            document.getElementById('form-error').textContent = data.error || 'Registration failed.';
+        }
+    } catch {
+        document.getElementById('form-error').textContent = 'Network error — please try again.';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create My Store';
+    }
+});
+
+function clearErrors() {
+    document.querySelectorAll('.field-error').forEach(el => el.textContent = '');
+}
+</script>
+</body>
+</html>

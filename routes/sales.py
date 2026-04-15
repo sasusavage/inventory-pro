@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session, make_response
+from flask import Blueprint, render_template, request, jsonify, session, make_response, g
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from io import BytesIO
@@ -37,6 +37,7 @@ def pos_lookup_customer():
         return jsonify([])
 
     customers = Customer.query.filter(
+        Customer.organisation_id == g.org_id,
         or_(
             Customer.phone.ilike(f'%{term}%'),
             Customer.full_name.ilike(f'%{term}%'),
@@ -61,12 +62,12 @@ def list_sales():
     date_to = request.args.get('date_to', '').strip()
 
     if session.get('role') == 'admin':
-        query = Sale.query.options(
+        query = Sale.query.filter_by(organisation_id=g.org_id).options(
             joinedload(Sale.customer),
             joinedload(Sale.items).joinedload(SaleItem.product),
         )
     else:
-        query = Sale.query.filter_by(user_id=session.get('user_id')).options(
+        query = Sale.query.filter_by(organisation_id=g.org_id, user_id=session.get('user_id')).options(
             joinedload(Sale.customer),
             joinedload(Sale.items).joinedload(SaleItem.product),
         )
@@ -146,6 +147,7 @@ def create_sale():
         new_sale = Sale(
             customer_id=data['customer_id'],
             user_id=session.get('user_id'),
+            organisation_id=g.org_id,
             total_amount=0,
             amount_paid=amount_paid,
             balance_due=0,
@@ -156,7 +158,7 @@ def create_sale():
 
         total = 0
         for item in data['items']:
-            product = Product.query.get(item['product_id'])
+            product = Product.query.filter_by(id=item['product_id'], organisation_id=g.org_id).first()
             if not product:
                 raise ValueError(f'Product {item["product_id"]} not found')
 

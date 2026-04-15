@@ -4,7 +4,7 @@ Earn: 1 point per $1 spent (rounded down).
 Redeem: 100 points = $1 discount.
 Configured via AppSetting: loyalty_earn_rate (default 1), loyalty_redeem_rate (default 100).
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from models import db, LoyaltyPoint, Customer, Sale, AppSetting
 from decorators import login_required, admin_required
 
@@ -49,7 +49,7 @@ def award_points_for_sale(sale: Sale):
 @loyalty_bp.route('/api/loyalty/<int:customer_id>/balance', methods=['GET'])
 @login_required
 def get_balance(customer_id):
-    Customer.query.get_or_404(customer_id)
+    Customer.query.filter_by(id=customer_id, organisation_id=g.org_id).first_or_404()
     balance = LoyaltyPoint.balance(customer_id)
     redeem_rate = _redeem_rate()
     return jsonify({
@@ -64,8 +64,8 @@ def get_balance(customer_id):
 @loyalty_bp.route('/api/loyalty/<int:customer_id>/history', methods=['GET'])
 @login_required
 def get_history(customer_id):
-    Customer.query.get_or_404(customer_id)
-    records = LoyaltyPoint.query.filter_by(customer_id=customer_id).order_by(
+    Customer.query.filter_by(id=customer_id, organisation_id=g.org_id).first_or_404()
+    records = LoyaltyPoint.query.filter_by(customer_id=customer_id, organisation_id=g.org_id).order_by(
         LoyaltyPoint.created_at.desc()
     ).limit(50).all()
     return jsonify([{
@@ -103,6 +103,7 @@ def redeem_points(customer_id):
         points=-points_to_redeem,
         reason='redemption',
         reference_id=data.get('sale_id'),
+        organisation_id=g.org_id,
     )
     db.session.add(lp)
     db.session.commit()

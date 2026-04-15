@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, g
 from models import db, ActivityLog
 from decorators import login_required
 
@@ -23,7 +23,7 @@ def list_activity():
     entity = request.args.get('entity', '').strip()
     username = request.args.get('username', '').strip()
 
-    query = ActivityLog.query
+    query = ActivityLog.query.filter_by(organisation_id=g.org_id)
     if action:
         query = query.filter(ActivityLog.action.ilike(f'%{action}%'))
     if entity:

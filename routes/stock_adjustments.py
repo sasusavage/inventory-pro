@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, g
 from models import db, StockAdjustment, Product
 from decorators import login_required, admin_required
 
@@ -18,7 +18,7 @@ def stock_adjustments_page():
 def list_adjustments():
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 50, type=int), 200)
-    pag = StockAdjustment.query.order_by(StockAdjustment.adjusted_at.desc()).paginate(
+    pag = StockAdjustment.query.filter_by(organisation_id=g.org_id).order_by(StockAdjustment.adjusted_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
     return jsonify({
@@ -46,7 +46,7 @@ def create_adjustment():
     if missing := [f for f in required if f not in data]:
         return jsonify({'error': f'Missing: {", ".join(missing)}'}), 400
 
-    product = Product.query.get_or_404(data['product_id'])
+    product = Product.query.filter_by(id=data['product_id'], organisation_id=g.org_id).first_or_404()
     qty_before = product.quantity_in_stock
     qty_after = int(data['new_quantity'])
 
@@ -60,6 +60,7 @@ def create_adjustment():
         quantity_after=qty_after,
         reason=data['reason'],
         note=data.get('note', '').strip() or None,
+        organisation_id=g.org_id,
     )
     product.quantity_in_stock = qty_after
     db.session.add(adj)

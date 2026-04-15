@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+{% block title %}Tenants — Super Admin{% endblock %}
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">🏢 All Tenants</h2>
+    <input type="text" id="search" class="form-control" placeholder="Search…" style="max-width:220px;">
+</header>
+
+<div class="table-container" style="overflow-x:auto;">
+    <table style="min-width:600px;">
+        <thead>
+            <tr>
+                <th>ID</th><th>Store Name</th><th>Slug</th><th>Country</th>
+                <th class="num">Users</th><th>Status</th><th>Created</th><th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="tbody">
+            <tr><td colspan="8" class="text-center" style="padding:2rem;color:var(--text-muted);">Loading…</td></tr>
+        </tbody>
+    </table>
+</div>
+<div id="pagination-bar" class="pagination" style="display:none;">
+    <button id="prev-btn" onclick="changePage(-1)" disabled>← Prev</button>
+    <span id="page-info" style="font-size:.82rem;color:var(--text-muted);padding:0 .5rem;"></span>
+    <button id="next-btn" onclick="changePage(1)">Next →</button>
+</div>
+
+<style>td.num,th.num{text-align:right;}</style>
+<script>
+let page = 1, totalPages = 1;
+let searchTimer;
+
+document.getElementById('search').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => load(1), 350);
+});
+
+document.addEventListener('DOMContentLoaded', () => load());
+
+async function load(p = page) {
+    page = p;
+    const search = document.getElementById('search').value.trim();
+    const params = new URLSearchParams({ page, per_page: 50 });
+    if (search) params.set('search', search);
+
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:1.5rem;color:var(--text-muted);">Loading…</td></tr>';
+
+    const d = await fetch(`/superadmin/api/tenants?${params}`).then(r => r.json());
+    totalPages = d.pagination.pages || 1;
+
+    const bar = document.getElementById('pagination-bar');
+    if (d.pagination.pages > 1) {
+        bar.style.display = 'flex';
+        document.getElementById('page-info').textContent = `Page ${d.pagination.page} of ${d.pagination.pages} (${d.pagination.total})`;
+        document.getElementById('prev-btn').disabled = page <= 1;
+        document.getElementById('next-btn').disabled = page >= totalPages;
+    } else { bar.style.display = 'none'; }
+
+    if (!d.data.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:2rem;color:var(--text-muted);">No tenants found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = d.data.map(o => `
+        <tr>
+            <td>${o.id}</td>
+            <td><strong>${esc(o.name)}</strong></td>
+            <td><code style="font-size:.8rem;">${esc(o.slug)}</code></td>
+            <td>${esc(o.country || '—')}</td>
+            <td class="num">${o.user_count}</td>
+            <td><span class="badge ${o.is_active ? 'badge-success' : 'badge-danger'}">${o.is_active ? 'Active' : 'Suspended'}</span></td>
+            <td style="font-size:.8rem;">${o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</td>
+            <td style="display:flex;gap:.4rem;flex-wrap:wrap;">
+                <a href="/superadmin/tenants/${o.id}" class="btn btn-secondary btn-sm">⚙ Manage</a>
+                <button onclick="toggleSuspend(${o.id}, this)" class="btn btn-sm ${o.is_active ? 'btn-danger' : 'btn-primary'}">${o.is_active ? 'Suspend' : 'Activate'}</button>
+            </td>
+        </tr>`).join('');
+}
+
+function changePage(dir) { const n = page + dir; if (n >= 1 && n <= totalPages) load(n); }
+
+async function toggleSuspend(orgId, btn) {
+    if (!confirm('Toggle tenant status?')) return;
+    const d = await fetch(`/superadmin/api/tenants/${orgId}/suspend`, { method:'POST' }).then(r => r.json());
+    alert(d.message);
+    load(page);
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

@@ -1,6 +1,6 @@
 import time
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, jsonify, session, redirect, url_for
+from flask import Blueprint, render_template, jsonify, session, redirect, url_for, g
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from models import db, Product, Sale, SaleItem, SupplierPayment, PurchaseOrder, StockMovement
@@ -23,31 +23,33 @@ def index():
 @login_required
 def get_dashboard_stats():
     role = session.get('role')
-    cache_key = f'stats_{role}'
+    org_id = g.org_id
+    cache_key = f'stats_{role}_{org_id}'
     now = time.time()
 
     if cache_key in _stats_cache and _stats_cache[cache_key]['expires'] > now:
         return jsonify(_stats_cache[cache_key]['data'])
 
-    total_sales = db.session.query(func.sum(Sale.total_amount)).scalar() or 0
-    total_orders = Sale.query.count()
+    total_sales = db.session.query(func.sum(Sale.total_amount)).filter_by(organisation_id=org_id).scalar() or 0
+    total_orders = Sale.query.filter_by(organisation_id=org_id).count()
     low_stock_count = Product.query.filter(
-        Product.quantity_in_stock <= Product.min_stock_level
+        Product.quantity_in_stock <= Product.min_stock_level,
+        Product.organisation_id == org_id,
     ).count()
 
     if role == 'admin':
         stock_value = db.session.query(
             func.sum(Product.quantity_in_stock * Product.cost_price)
-        ).scalar() or 0
+        ).filter(Product.organisation_id == org_id).scalar() or 0
         total_expenses = db.session.query(
             func.sum(SupplierPayment.amount_paid)
-        ).scalar() or 0
+        ).filter_by(organisation_id=org_id).scalar() or 0
         accounts_receivable = db.session.query(
             func.sum(Sale.balance_due)
-        ).scalar() or 0
+        ).filter_by(organisation_id=org_id).scalar() or 0
         total_credit_pos = db.session.query(
             func.sum(PurchaseOrder.total_amount)
-        ).filter_by(payment_type='Credit').scalar() or 0
+        ).filter_by(payment_type='Credit', organisation_id=org_id).scalar() or 0
         accounts_payable = max(0, total_credit_pos - total_expenses)
 
         data = {
@@ -60,7 +62,7 @@ def get_dashboard_stats():
             'accounts_payable': float(accounts_payable),
         }
     else:
-        my_sales = Sale.query.filter_by(payment_status='PAID').count()
+        my_sales = Sale.query.filter_by(payment_status='PAID', organisation_id=org_id).count()
         data = {
             'total_orders': total_orders,
             'low_stock_count': low_stock_count,
@@ -79,7 +81,8 @@ def invalidate_stats_cache():
 @login_required
 def get_low_stock():
     products = Product.query.filter(
-        Product.quantity_in_stock <= Product.min_stock_level
+        Product.quantity_in_stock <= Product.min_stock_level,
+        Product.organisation_id == g.org_id,
     ).all()
     return jsonify([{
         'id': p.id,
@@ -94,6 +97,7 @@ def get_low_stock():
 def get_stock_movements():
     logs = (
         StockMovement.query
+        .filter_by(organisation_id=g.org_id)
         .options(joinedload(StockMovement.product))
         .order_by(StockMovement.timestamp.desc())
         .limit(50)
@@ -117,13 +121,17 @@ def stock_intelligence():
         func.sum(SaleItem.quantity).label('qty_sold')
     ).join(Sale).filter(
         Sale.sale_date >= thirty_days_ago,
+        Sale.organisation_id == g.org_id,
         SaleItem.status == 'Active'
     ).group_by(SaleItem.product_id).all()
 
     sales_dict = {row.product_id: row.qty_sold for row in sales_last_30}
     intelligence = []
 
-    for p in Product.query.filter(Product.quantity_in_stock <= Product.min_stock_level).all():
+    for p in Product.query.filter(
+        Product.quantity_in_stock <= Product.min_stock_level,
+        Product.organisation_id == g.org_id,
+    ).all():
         qty_sold_30 = sales_dict.get(p.id, 0)
         daily_rate = qty_sold_30 / 30.0
         days_remaining = (p.quantity_in_stock / daily_rate) if daily_rate > 0 else 999

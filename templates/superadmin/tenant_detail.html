@@ -1,0 +1,103 @@
+{% extends "layout.html" %}
+{% block title %}{{ org.name }} — Super Admin{% endblock %}
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">⚙ {{ org.name }}</h2>
+    <div style="display:flex;gap:.5rem;">
+        <a href="/superadmin/tenants" class="btn btn-secondary btn-sm">← Back</a>
+        <button onclick="saveModules()" class="btn btn-primary btn-sm">Save Modules</button>
+    </div>
+</header>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div class="card" style="padding:1.25rem;">
+        <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem;">Org Info</h3>
+        <div style="font-size:.9rem;display:flex;flex-direction:column;gap:.4rem;">
+            <div><strong>ID:</strong> {{ org.id }}</div>
+            <div><strong>Slug:</strong> <code>{{ org.slug }}</code></div>
+            <div><strong>Currency:</strong> {{ org.currency }}</div>
+            <div><strong>Country:</strong> {{ org.country }}</div>
+            <div><strong>Status:</strong>
+                {% if org.is_active %}<span class="badge badge-success">Active</span>
+                {% else %}<span class="badge badge-danger">Suspended</span>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="padding:1.25rem;">
+        <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.75rem;">Users</h3>
+        <div id="users-list" style="font-size:.85rem;">Loading…</div>
+    </div>
+</div>
+
+<div class="card" style="padding:1.25rem;">
+    <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;">FEATURE MODULES</h3>
+    <div id="modules-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:.5rem;">
+        Loading…
+    </div>
+</div>
+
+<style>
+.module-toggle { display:flex; align-items:center; justify-content:space-between; padding:.6rem .75rem; background:var(--bg-base); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); font-size:.85rem; }
+.toggle-switch { position:relative; width:40px; height:22px; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; inset:0; background:#cbd5e1; border-radius:22px; cursor:pointer; transition:.2s; }
+.toggle-slider:before { content:''; position:absolute; width:16px; height:16px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
+.toggle-switch input:checked + .toggle-slider { background:var(--accent-primary); }
+.toggle-switch input:checked + .toggle-slider:before { transform:translateX(18px); }
+</style>
+
+<script>
+const ORG_ID = {{ org.id }};
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const d = await fetch(`/superadmin/api/tenants/${ORG_ID}`).then(r => r.json());
+
+    // Users
+    const ul = document.getElementById('users-list');
+    if (!d.users.length) { ul.textContent = 'No users yet.'; }
+    else { ul.innerHTML = d.users.map(u =>
+        `<div style="padding:.25rem 0;border-bottom:1px dashed var(--border-subtle);">
+            <strong>${esc(u.username)}</strong> <span style="color:var(--text-muted);">${u.role}</span>
+            ${!u.is_active ? '<span class="badge badge-danger" style="font-size:.65rem;">Inactive</span>' : ''}
+         </div>`
+    ).join(''); }
+
+    // Modules
+    const mg = document.getElementById('modules-grid');
+    const LABELS = {
+        pos:'POS Terminal', inventory:'Inventory', purchase_orders:'Purchase Orders',
+        customers:'Customers', loyalty:'Loyalty Points', suppliers:'Suppliers',
+        expenses:'Expenses', reports:'Reports', ai_analytics:'AI Analytics',
+        refunds:'Refunds', categories:'Categories', stock_adjustments:'Stock Adjustments',
+        telegram:'Telegram Alerts', activity_log:'Activity Log', multi_branch:'Multi-Branch',
+        pnl_report:'P&L Report', top_customers:'Top Customers',
+    };
+    mg.innerHTML = Object.entries(d.modules).map(([mod, enabled]) => `
+        <div class="module-toggle">
+            <span>${LABELS[mod] || mod}</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="mod-${mod}" ${enabled ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>`).join('');
+});
+
+async function saveModules() {
+    const payload = {};
+    document.querySelectorAll('[id^="mod-"]').forEach(cb => {
+        payload[cb.id.replace('mod-', '')] = cb.checked;
+    });
+    const res  = await fetch(`/superadmin/api/tenants/${ORG_ID}/modules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) { window.showToastNotification(data.message, 'success'); }
+    else        { window.showToastNotification(data.error || 'Failed', 'error'); }
+}
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

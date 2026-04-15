@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, g
 from models import db, Expense
 from decorators import login_required, admin_required
 from datetime import datetime
@@ -18,13 +18,14 @@ def expenses_page():
 @expenses_bp.route('/api/expenses', methods=['GET'])
 @admin_required
 def list_expenses():
+    org_id = g.org_id
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 50, type=int), 200)
     category = request.args.get('category', '').strip()
     date_from = request.args.get('date_from', '').strip()
     date_to = request.args.get('date_to', '').strip()
 
-    q = Expense.query
+    q = Expense.query.filter_by(organisation_id=org_id)
     if category:
         q = q.filter_by(category=category)
     if date_from:
@@ -66,6 +67,7 @@ def create_expense():
         category=data.get('category', 'Other'),
         note=data.get('note', '').strip() or None,
         expense_date=datetime.strptime(data['expense_date'], '%Y-%m-%d') if data.get('expense_date') else datetime.utcnow(),
+        organisation_id=g.org_id,
     )
     db.session.add(exp)
     db.session.commit()
@@ -75,7 +77,7 @@ def create_expense():
 @expenses_bp.route('/api/expenses/<int:exp_id>', methods=['PUT'])
 @admin_required
 def update_expense(exp_id):
-    exp = Expense.query.get_or_404(exp_id)
+    exp = Expense.query.filter_by(id=exp_id, organisation_id=g.org_id).first_or_404()
     data = request.json or {}
     for field in ['title', 'amount', 'category', 'note']:
         if field in data:
@@ -89,7 +91,7 @@ def update_expense(exp_id):
 @expenses_bp.route('/api/expenses/<int:exp_id>', methods=['DELETE'])
 @admin_required
 def delete_expense(exp_id):
-    exp = Expense.query.get_or_404(exp_id)
+    exp = Expense.query.filter_by(id=exp_id, organisation_id=g.org_id).first_or_404()
     db.session.delete(exp)
     db.session.commit()
     return jsonify({'message': 'Deleted'})
@@ -102,7 +104,7 @@ def expenses_summary():
     rows = db.session.query(
         Expense.category,
         func.sum(Expense.amount).label('total')
-    ).group_by(Expense.category).all()
+    ).filter_by(organisation_id=g.org_id).group_by(Expense.category).all()
 
     total_all = sum(r.total for r in rows)
     return jsonify({

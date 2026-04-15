@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, session
+from flask import Blueprint, render_template, request, jsonify, session, g
 from models import db, PurchaseOrder, PurchaseOrderItem, SupplierPayment
 from decorators import login_required, admin_required
 from utils import log_stock_movement
@@ -17,7 +17,7 @@ def purchase_orders_page():
 def list_purchase_orders():
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 50, type=int), 200)
-    paginated = PurchaseOrder.query.order_by(PurchaseOrder.created_at.desc()).paginate(
+    paginated = PurchaseOrder.query.filter_by(organisation_id=g.org_id).order_by(PurchaseOrder.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
 
@@ -65,6 +65,7 @@ def create_purchase_order():
             supplier_id=data['supplier_id'],
             payment_type=data.get('payment_type', 'Credit'),
             status='Pending',
+            organisation_id=g.org_id,
         )
         db.session.add(po)
         db.session.flush()
@@ -104,7 +105,7 @@ def receive_po(po_id):
     { "receipts": [{ "item_id": 1, "quantity": 5 }, ...] }
     """
     from models import ActivityLog
-    po = PurchaseOrder.query.get_or_404(po_id)
+    po = PurchaseOrder.query.filter_by(id=po_id, organisation_id=g.org_id).first_or_404()
 
     if po.status not in ('Pending', 'Partial'):
         return jsonify({'error': f'PO is {po.status} — cannot receive'}), 400
@@ -194,7 +195,7 @@ def receive_po(po_id):
 @login_required
 @admin_required
 def cancel_po(po_id):
-    po = PurchaseOrder.query.get_or_404(po_id)
+    po = PurchaseOrder.query.filter_by(id=po_id, organisation_id=g.org_id).first_or_404()
 
     if po.status != 'Pending':
         return jsonify({'error': 'Only pending POs can be cancelled'}), 400
@@ -214,7 +215,8 @@ def reorder_suggestions():
     """List products at or below min_stock_level with a suggested reorder qty."""
     from models import Product
     products = Product.query.filter(
-        Product.quantity_in_stock <= Product.min_stock_level
+        Product.quantity_in_stock <= Product.min_stock_level,
+        Product.organisation_id == g.org_id,
     ).order_by(Product.name).all()
 
     results = []
@@ -249,7 +251,10 @@ def auto_draft_po():
         return jsonify({'error': 'supplier_id is required'}), 400
 
     product_ids = data.get('product_ids') or []
-    query = Product.query.filter(Product.quantity_in_stock <= Product.min_stock_level)
+    query = Product.query.filter(
+        Product.quantity_in_stock <= Product.min_stock_level,
+        Product.organisation_id == g.org_id,
+    )
     if product_ids:
         query = query.filter(Product.id.in_(product_ids))
     products = query.all()
@@ -262,6 +267,7 @@ def auto_draft_po():
             supplier_id=supplier_id,
             payment_type=data.get('payment_type', 'Credit'),
             status='Pending',
+            organisation_id=g.org_id,
         )
         db.session.add(po)
         db.session.flush()
