@@ -8,9 +8,19 @@ def _run_migrations(flask_app):
         from models import db, DEFAULT_MODULES, AVAILABLE_MODULES
         from sqlalchemy import inspect, text
 
-        # Create any new tables (idempotent)
+        # Drop SaaS infrastructure tables so they are recreated with the
+        # correct schema. These hold only seed data, never real user data.
+        for _t in ('subscriptions', 'tenant_modules', 'plans', 'branches'):
+            try:
+                db.session.execute(text(f'DROP TABLE IF EXISTS {_t} CASCADE'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
+        # Create all tables fresh (new ones) or leave existing ones untouched
         db.create_all()
 
+        # Refresh inspector after drop/create
         inspector = inspect(db.engine)
         existing_tables = inspector.get_table_names()
 
@@ -138,52 +148,6 @@ def _run_migrations(flask_app):
         sadj_cols = cols('stock_adjustments')
         if sadj_cols and 'organisation_id' not in sadj_cols:
             safe_alter('ALTER TABLE stock_adjustments ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)')
-
-        # ── branches: add columns before seeding ─────────────────────────────
-        branch_cols = cols('branches')
-        if branch_cols:
-            if 'organisation_id' not in branch_cols:
-                safe_alter('ALTER TABLE branches ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)')
-            if 'is_main' not in branch_cols:
-                safe_alter('ALTER TABLE branches ADD COLUMN is_main BOOLEAN DEFAULT FALSE')
-            if 'is_active' not in branch_cols:
-                safe_alter('ALTER TABLE branches ADD COLUMN is_active BOOLEAN DEFAULT TRUE')
-            if 'address' not in branch_cols:
-                safe_alter('ALTER TABLE branches ADD COLUMN address TEXT')
-            if 'phone' not in branch_cols:
-                safe_alter('ALTER TABLE branches ADD COLUMN phone VARCHAR(30)')
-
-        # ── plans: add columns before seeding ────────────────────────────────
-        plan_cols = cols('plans')
-        if plan_cols:
-            if 'slug' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN slug VARCHAR(60)")
-            if 'price_monthly' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN price_monthly NUMERIC(10,2) DEFAULT 0")
-            if 'max_branches' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN max_branches INTEGER DEFAULT 1")
-            if 'max_users' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN max_users INTEGER DEFAULT 5")
-            if 'max_products' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN max_products INTEGER DEFAULT 1000")
-            if 'max_customers' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN max_customers INTEGER DEFAULT 500")
-            if 'is_active' not in plan_cols:
-                safe_alter("ALTER TABLE plans ADD COLUMN is_active BOOLEAN DEFAULT TRUE")
-
-        # ── subscriptions: add columns before seeding ─────────────────────────
-        sub_cols = cols('subscriptions')
-        if sub_cols:
-            if 'organisation_id' not in sub_cols:
-                safe_alter("ALTER TABLE subscriptions ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)")
-            if 'plan_id' not in sub_cols:
-                safe_alter("ALTER TABLE subscriptions ADD COLUMN plan_id INTEGER REFERENCES plans(id)")
-            if 'status' not in sub_cols:
-                safe_alter("ALTER TABLE subscriptions ADD COLUMN status VARCHAR(30) DEFAULT 'active'")
-            if 'current_period_start' not in sub_cols:
-                safe_alter("ALTER TABLE subscriptions ADD COLUMN current_period_start TIMESTAMP")
-            if 'current_period_end' not in sub_cols:
-                safe_alter("ALTER TABLE subscriptions ADD COLUMN current_period_end TIMESTAMP")
 
         # ── organisations: add extra columns BEFORE seeding org #1 ──────────────
         if 'organisations' in existing_tables:
