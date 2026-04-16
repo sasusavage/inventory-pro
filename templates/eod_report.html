@@ -1,0 +1,159 @@
+{% extends "layout.html" %}
+{% block title %}End-of-Day Report - InventoryPro{% endblock %}
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">🌙 End-of-Day Report</h2>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+        <input type="date" id="eod-date" class="form-control" style="width:auto;" onchange="loadSummary()">
+        <button class="btn btn-secondary" onclick="loadSummary()">🔄 Refresh</button>
+    </div>
+</header>
+
+<div id="eod-content" style="display:flex;flex-direction:column;gap:1.5rem;">
+    <div style="text-align:center;padding:3rem;color:var(--text-muted);">
+        <div style="font-size:2rem;margin-bottom:0.5rem;">⏳</div>
+        Loading report…
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('eod-date').value = new Date().toISOString().slice(0, 10);
+        loadSummary();
+    });
+
+    async function loadSummary() {
+        const date = document.getElementById('eod-date').value;
+        const box  = document.getElementById('eod-content');
+        box.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-muted);"><div style="font-size:2rem;">⏳</div>Loading…</div>';
+        try {
+            const res = await fetch(`/api/eod/summary?date=${date}`);
+            if (!res.ok) throw new Error('Failed');
+            const d = await res.json();
+            renderReport(d);
+        } catch {
+            box.innerHTML = '<div style="text-align:center;padding:3rem;color:#ef4444;">Failed to load report. Try again.</div>';
+        }
+    }
+
+    function renderReport(d) {
+        const box = document.getElementById('eod-content');
+        const varianceColor = d.variance === null ? 'var(--text-muted)'
+            : d.variance === 0 ? '#10b981'
+            : d.variance > 0 ? '#6366f1'
+            : '#ef4444';
+        const varianceLabel = d.variance === null ? '—'
+            : d.variance >= 0 ? `+${d.variance.toFixed(2)}` : d.variance.toFixed(2);
+
+        const methodRows = Object.entries(d.method_totals || {}).map(([m, v]) =>
+            `<div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid var(--border-subtle);">
+                <span style="text-transform:capitalize;">${esc(m)}</span>
+                <strong>${v.toFixed(2)}</strong>
+            </div>`).join('');
+
+        const topProductRows = (d.top_products || []).map((p, i) =>
+            `<tr>
+                <td style="color:var(--text-muted);">${i + 1}</td>
+                <td style="font-weight:600;">${esc(p.name)}</td>
+                <td>${p.qty}</td>
+                <td>${p.revenue.toFixed(2)}</td>
+            </tr>`).join('');
+
+        box.innerHTML = `
+        <!-- KPI Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:1rem;">
+            <div class="card" style="padding:1.25rem;">
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Transactions</div>
+                <div style="font-size:2rem;font-weight:800;margin-top:.25rem;">${d.total_transactions}</div>
+            </div>
+            <div class="card" style="padding:1.25rem;">
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Total Sales</div>
+                <div style="font-size:2rem;font-weight:800;margin-top:.25rem;color:var(--accent-primary);">${d.total_sales_amount.toFixed(2)}</div>
+            </div>
+            <div class="card" style="padding:1.25rem;">
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Expected Cash</div>
+                <div style="font-size:2rem;font-weight:800;margin-top:.25rem;">${d.expected_cash.toFixed(2)}</div>
+            </div>
+            <div class="card" style="padding:1.25rem;">
+                <div style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;">Cash Variance</div>
+                <div style="font-size:2rem;font-weight:800;margin-top:.25rem;color:${varianceColor};">${varianceLabel}</div>
+                <div style="font-size:0.72rem;color:var(--text-muted);">${d.variance === null ? 'Count not entered' : d.variance === 0 ? 'Balanced ✓' : d.variance > 0 ? 'Surplus' : 'Shortage'}</div>
+            </div>
+        </div>
+
+        <!-- Payment Breakdown + Cash Reconciliation -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+            <div class="card">
+                <div class="card-header"><h3 style="margin:0;font-size:.95rem;">💳 Payment Breakdown</h3></div>
+                <div class="card-body">
+                    ${methodRows || '<p style="color:var(--text-muted);font-size:.85rem;">No sales today.</p>'}
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h3 style="margin:0;font-size:.95rem;">🔒 Cash Reconciliation</h3></div>
+                <div class="card-body" style="display:flex;flex-direction:column;gap:.75rem;">
+                    <div style="display:flex;justify-content:space-between;font-size:.88rem;">
+                        <span>Expected Cash</span><strong>${d.expected_cash.toFixed(2)}</strong>
+                    </div>
+                    <div class="form-group" style="margin:0;">
+                        <label style="font-size:.8rem;font-weight:600;">Actual Cash Counted</label>
+                        <input type="number" id="actual-cash" class="form-control" step="0.01" min="0"
+                               value="${d.actual_cash !== null ? d.actual_cash : ''}"
+                               placeholder="Enter cash in drawer…">
+                    </div>
+                    <div id="variance-preview" style="font-size:.85rem;font-weight:600;color:var(--text-muted);">
+                        ${d.variance !== null ? `Variance: <span style="color:${varianceColor};">${varianceLabel}</span>` : ''}
+                    </div>
+                    <button class="btn btn-primary" onclick="saveCashCount('${d.date}')">💾 Save Cash Count</button>
+                    <p id="reconcile-msg" style="font-size:.82rem;min-height:1em;"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Products -->
+        ${topProductRows ? `
+        <div class="card">
+            <div class="card-header"><h3 style="margin:0;font-size:.95rem;">🏆 Top Products Today</h3></div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead><tr><th>#</th><th>Product</th><th>Qty Sold</th><th>Revenue</th></tr></thead>
+                    <tbody>${topProductRows}</tbody>
+                </table>
+            </div>
+        </div>` : ''}
+        `;
+
+        // Live variance preview
+        document.getElementById('actual-cash').addEventListener('input', function() {
+            const actual = parseFloat(this.value);
+            const preview = document.getElementById('variance-preview');
+            if (!isNaN(actual)) {
+                const v = actual - d.expected_cash;
+                const color = v === 0 ? '#10b981' : v > 0 ? '#6366f1' : '#ef4444';
+                const label = v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2);
+                preview.innerHTML = `Variance: <span style="color:${color};font-weight:700;">${label}</span>`;
+            } else {
+                preview.innerHTML = '';
+            }
+        });
+    }
+
+    async function saveCashCount(date) {
+        const actual = parseFloat(document.getElementById('actual-cash').value);
+        const msg = document.getElementById('reconcile-msg');
+        if (isNaN(actual) || actual < 0) { msg.style.color = '#f43f5e'; msg.textContent = 'Enter a valid amount.'; return; }
+
+        const res = await fetch('/api/eod/reconcile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, actual_cash: actual }),
+        });
+        const d = await res.json();
+        msg.style.color = res.ok ? '#10b981' : '#f43f5e';
+        msg.textContent = res.ok ? '✓ Saved' : d.error;
+        if (res.ok) loadSummary();
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+{% endblock %}

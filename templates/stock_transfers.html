@@ -1,0 +1,232 @@
+{% extends "layout.html" %}
+{% block title %}Stock Transfers - InventoryPro{% endblock %}
+{% block content %}
+<header class="page-header">
+    <h2 class="page-title">🔄 Branch Stock Transfers</h2>
+    <button class="btn btn-primary" onclick="openNewTransfer()">➕ New Transfer</button>
+</header>
+
+<!-- Filters -->
+<div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center;">
+    <select id="filter-status" class="form-control" style="width:auto;" onchange="loadTransfers()">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="completed">Completed</option>
+        <option value="cancelled">Cancelled</option>
+    </select>
+    <button class="btn btn-secondary btn-sm" onclick="loadTransfers()">🔄 Refresh</button>
+</div>
+
+<div class="card">
+    <div class="table-container">
+        <table class="data-table" id="transfers-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Product</th>
+                    <th>From Branch</th>
+                    <th>To Branch</th>
+                    <th>Qty</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="transfers-body">
+                <tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="transfers-pagination" style="display:flex;gap:0.5rem;justify-content:center;padding:1rem;flex-wrap:wrap;"></div>
+</div>
+
+<!-- New Transfer Modal -->
+<div id="transfer-modal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2 style="font-size:1.05rem;font-weight:700;margin:0;">🔄 Create Stock Transfer</h2>
+            <button class="close-modal" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="transfer-form" onsubmit="submitTransfer(event)">
+            <div class="form-group">
+                <label>Product *</label>
+                <select id="tf-product" class="form-control" required>
+                    <option value="">— select product —</option>
+                </select>
+            </div>
+            <div class="grid-2-col">
+                <div class="form-group">
+                    <label>From Branch *</label>
+                    <select id="tf-from" class="form-control" required>
+                        <option value="">— select —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>To Branch *</label>
+                    <select id="tf-to" class="form-control" required>
+                        <option value="">— select —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Quantity *</label>
+                <input type="number" id="tf-qty" class="form-control" min="1" required placeholder="0">
+            </div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea id="tf-notes" class="form-control" rows="2" placeholder="Reason or reference…"></textarea>
+            </div>
+            <p id="tf-msg" style="font-size:0.82rem;color:#dc2626;min-height:1em;"></p>
+            <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="tf-submit">Create Transfer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let branches = [];
+    let currentPage = 1;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await Promise.all([loadBranches(), loadProducts()]);
+        loadTransfers();
+    });
+
+    async function loadBranches() {
+        try {
+            const res = await fetch('/api/branches');
+            branches = await res.json();
+            populateBranchSelects();
+        } catch {}
+    }
+
+    function populateBranchSelects() {
+        const opts = branches.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+        document.getElementById('tf-from').innerHTML = '<option value="">— select —</option>' + opts;
+        document.getElementById('tf-to').innerHTML   = '<option value="">— select —</option>' + opts;
+    }
+
+    async function loadProducts() {
+        try {
+            const res = await fetch('/products?per_page=500');
+            const json = await res.json();
+            const prods = Array.isArray(json) ? json : (json.data || []);
+            const sel = document.getElementById('tf-product');
+            sel.innerHTML = '<option value="">— select product —</option>' + prods.map(p =>
+                `<option value="${p.id}">${esc(p.name)} (stock: ${p.quantity_in_stock})</option>`).join('');
+        } catch {}
+    }
+
+    async function loadTransfers(page = 1) {
+        currentPage = page;
+        const status = document.getElementById('filter-status').value;
+        const params = new URLSearchParams({ page, per_page: 20 });
+        if (status) params.set('status', status);
+        try {
+            const res = await fetch(`/api/transfers?${params}`);
+            const json = await res.json();
+            renderTable(json.data || []);
+            renderPagination(json.pagination || {});
+        } catch {
+            document.getElementById('transfers-body').innerHTML =
+                '<tr><td colspan="8" style="text-align:center;color:#ef4444;">Failed to load</td></tr>';
+        }
+    }
+
+    function renderTable(rows) {
+        const tbody = document.getElementById('transfers-body');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted);">No transfers found.</td></tr>';
+            return;
+        }
+        const statusColors = { pending: '#f59e0b', completed: '#10b981', cancelled: '#94a3b8' };
+        tbody.innerHTML = rows.map(t => `
+            <tr>
+                <td>#${t.id}</td>
+                <td style="font-weight:600;">${esc(t.product_name)}</td>
+                <td>${esc(t.from_branch)}</td>
+                <td>${esc(t.to_branch)}</td>
+                <td>${t.quantity}</td>
+                <td><span class="badge" style="background:${statusColors[t.status]||'#94a3b8'};color:#fff;">${t.status}</span></td>
+                <td style="font-size:0.8rem;color:var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</td>
+                <td>
+                    ${t.status === 'pending' ? `
+                        <button class="btn btn-sm btn-primary" style="font-size:0.75rem;padding:3px 8px;" onclick="completeTransfer(${t.id})">✓ Complete</button>
+                        <button class="btn btn-sm" style="font-size:0.75rem;padding:3px 8px;background:#fee2e2;color:#ef4444;border:1px solid #fca5a5;margin-left:4px;" onclick="cancelTransfer(${t.id})">✕ Cancel</button>
+                    ` : '—'}
+                </td>
+            </tr>`).join('');
+    }
+
+    function renderPagination(p) {
+        const el = document.getElementById('transfers-pagination');
+        if (!p.pages || p.pages <= 1) { el.innerHTML = ''; return; }
+        let html = '';
+        for (let i = 1; i <= p.pages; i++) {
+            html += `<button class="btn btn-sm ${i === p.page ? 'btn-primary' : 'btn-secondary'}" onclick="loadTransfers(${i})">${i}</button>`;
+        }
+        el.innerHTML = html;
+    }
+
+    function openNewTransfer() {
+        document.getElementById('transfer-form').reset();
+        document.getElementById('tf-msg').textContent = '';
+        document.getElementById('transfer-modal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('transfer-modal').classList.remove('active');
+    }
+
+    async function submitTransfer(e) {
+        e.preventDefault();
+        const msg = document.getElementById('tf-msg');
+        const btn = document.getElementById('tf-submit');
+        const fromId = parseInt(document.getElementById('tf-from').value);
+        const toId   = parseInt(document.getElementById('tf-to').value);
+        if (fromId === toId) { msg.textContent = 'From and To branches must be different.'; return; }
+
+        btn.disabled = true; btn.textContent = 'Creating…';
+        msg.textContent = '';
+        try {
+            const res = await fetch('/api/transfers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    product_id:    parseInt(document.getElementById('tf-product').value),
+                    from_branch_id: fromId,
+                    to_branch_id:   toId,
+                    quantity:       parseInt(document.getElementById('tf-qty').value),
+                    notes:          document.getElementById('tf-notes').value.trim() || null,
+                }),
+            });
+            const d = await res.json();
+            if (!res.ok) { msg.textContent = d.error || 'Failed'; return; }
+            closeModal();
+            loadTransfers();
+            window.showToastNotification('Transfer created.', 'success');
+        } catch { msg.textContent = 'Network error'; }
+        finally { btn.disabled = false; btn.textContent = 'Create Transfer'; }
+    }
+
+    async function completeTransfer(id) {
+        if (!confirm('Mark this transfer as completed? Stock will be deducted from the source branch.')) return;
+        const res = await fetch(`/api/transfers/${id}/complete`, { method: 'POST' });
+        const d = await res.json();
+        window.showToastNotification(d.message || d.error, res.ok ? 'success' : 'error');
+        if (res.ok) loadTransfers(currentPage);
+    }
+
+    async function cancelTransfer(id) {
+        if (!confirm('Cancel this transfer?')) return;
+        const res = await fetch(`/api/transfers/${id}/cancel`, { method: 'POST' });
+        const d = await res.json();
+        window.showToastNotification(d.message || d.error, res.ok ? 'success' : 'error');
+        if (res.ok) loadTransfers(currentPage);
+    }
+
+    function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+</script>
+{% endblock %}

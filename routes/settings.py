@@ -20,6 +20,11 @@ SETTING_KEYS = {
     'scheduler_weekly_report': 'Weekly AI report via Telegram (true/false)',
     'loyalty_earn_rate': 'Loyalty points earned per $1 spent (default 1)',
     'loyalty_redeem_rate': 'Points needed to redeem $1 discount (default 100)',
+    # SMS receipts (Africa's Talking)
+    'sms_enabled':    'Enable SMS receipts (1 = yes, 0 = no)',
+    'sms_username':   "Africa's Talking username (use 'sandbox' for testing)",
+    'sms_api_key':    "Africa's Talking API key",
+    'sms_sender_id':  'SMS Sender ID (leave blank for default)',
 }
 
 
@@ -153,6 +158,33 @@ def request_custom_domain():
         'message': 'Domain request submitted. A super admin will verify DNS and activate it.',
         'custom_domain': domain,
     })
+
+
+@settings_bp.route('/api/settings/subdomain', methods=['POST'])
+@login_required
+@admin_required
+def change_subdomain():
+    """Tenant changes their slug (subdomain). Must be unique across all orgs."""
+    import re
+    data = request.json or {}
+    new_slug = (data.get('slug') or '').strip().lower()
+
+    if not new_slug:
+        return jsonify({'error': 'slug is required'}), 400
+    if not re.match(r'^[a-z0-9-]+$', new_slug) or len(new_slug) < 3:
+        return jsonify({'error': 'Slug must be at least 3 chars, lowercase letters, numbers and hyphens only'}), 400
+
+    existing = Organisation.query.filter(
+        Organisation.slug == new_slug,
+        Organisation.id != g.org_id,
+    ).first()
+    if existing:
+        return jsonify({'error': 'This subdomain is already taken'}), 409
+
+    org = Organisation.query.get(g.org_id)
+    org.slug = new_slug
+    db.session.commit()
+    return jsonify({'message': f'Subdomain updated to {new_slug}', 'slug': new_slug})
 
 
 @settings_bp.route('/api/settings/domain', methods=['DELETE'])

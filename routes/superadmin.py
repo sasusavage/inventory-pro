@@ -190,6 +190,34 @@ def impersonate_tenant(org_id):
     return jsonify({'message': f'Now viewing as {org.name}', 'redirect': '/'})
 
 
+@superadmin_bp.route('/test-features')
+@super_admin_required
+def test_features():
+    """Auto-impersonate the first real tenant so super admin can browse shop features."""
+    from flask import redirect
+    org = Organisation.query.filter(Organisation.id != 2).order_by(Organisation.id).first()
+    if not org:
+        # No real tenants yet — just go to the tenant dashboard as-is
+        return redirect('/')
+    # Reuse the impersonation logic
+    session['impersonating_org_id']   = org.id
+    session['impersonating_org_name'] = org.name
+    session['real_user_id']           = session.get('user_id')
+    session['real_username']          = session.get('username')
+    session['real_role']              = session.get('role')
+    session['real_org_id']            = session.get('org_id')
+    session['org_id'] = org.id
+    tenant_admin = User.query.filter_by(organisation_id=org.id, role='admin').first() \
+                or User.query.filter_by(organisation_id=org.id).first()
+    if tenant_admin:
+        session['user_id']  = tenant_admin.id
+        session['username'] = tenant_admin.username
+        session['role']     = tenant_admin.role
+    else:
+        session['role'] = 'admin'
+    return redirect('/')
+
+
 @superadmin_bp.route('/stop-impersonating')
 def stop_impersonating():
     """Restore the super admin's real session."""

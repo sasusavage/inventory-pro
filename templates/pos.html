@@ -148,7 +148,11 @@
     <div class="pos-cart-panel">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-shrink:0;">
             <h3 style="margin:0;">🛒 Basket</h3>
-            <button class="btn btn-secondary btn-sm" onclick="clearCart()">Clear</button>
+            <div style="display:flex;gap:0.4rem;">
+                <button class="btn btn-secondary btn-sm" onclick="holdCart()" title="Hold this transaction">⏸ Hold</button>
+                <button class="btn btn-secondary btn-sm" onclick="openHeldCarts()" title="Resume a held transaction" id="held-count-btn" style="display:none;">📂 <span id="held-count">0</span></button>
+                <button class="btn btn-secondary btn-sm" onclick="clearCart()">Clear</button>
+            </div>
         </div>
 
         <div class="form-group" style="flex-shrink:0; margin-bottom:0.75rem; position:relative;">
@@ -217,6 +221,29 @@
                 ✅ Complete Order
             </button>
         </div>
+    </div>
+</div>
+
+<!-- Held Carts Modal -->
+<div id="held-modal" class="modal">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2 style="font-size:1.05rem;font-weight:700;margin:0;">📂 Held Transactions</h2>
+            <button class="close-modal" onclick="document.getElementById('held-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div id="held-list" style="display:flex;flex-direction:column;gap:0.75rem;padding-top:0.5rem;max-height:400px;overflow-y:auto;"></div>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-top:0.75rem;">Selecting a held cart will replace your current basket.</p>
+    </div>
+</div>
+
+<!-- Variant Picker Modal -->
+<div id="variant-modal" class="modal">
+    <div class="modal-content" style="max-width:420px;">
+        <div class="modal-header">
+            <h2 id="variant-modal-title" style="font-size:1.05rem;font-weight:700;margin:0;">Select Variant</h2>
+            <button class="close-modal" onclick="document.getElementById('variant-modal').classList.remove('active')">&times;</button>
+        </div>
+        <div id="variant-list" style="display:flex;flex-direction:column;gap:0.5rem;padding-top:0.5rem;"></div>
     </div>
 </div>
 
@@ -419,37 +446,6 @@
         }).join('');
     }
 
-    function addToCart(pId) {
-        const p = products.find(x => x.id === pId);
-        if (!p || p.quantity_in_stock <= 0) return;
-        const existing = cart.find(x => x.id === pId);
-        if (existing) {
-            if (existing.quantity >= p.quantity_in_stock) {
-                showToast('No more stock available!', 'warning');
-                return;
-            }
-            existing.quantity++;
-        } else {
-            cart.push({ ...p, quantity: 1 });
-        }
-        renderCart();
-    }
-
-    function updateCartQty(pId, val) {
-        const qty = parseInt(val);
-        const p = products.find(x => x.id === pId);
-        if (!p) return;
-        if (isNaN(qty) || qty <= 0) {
-            cart = cart.filter(x => x.id !== pId);
-        } else if (qty > p.quantity_in_stock) {
-            showToast('Not enough stock!', 'warning');
-            return;
-        } else {
-            cart.find(x => x.id === pId).quantity = qty;
-        }
-        renderCart();
-    }
-
     function renderCart() {
         const container = document.getElementById('pos-cart');
         const badge = document.getElementById('cart-badge');
@@ -467,22 +463,26 @@
         badge.textContent = `${totalItems} item${totalItems !== 1 ? 's' : ''}`;
         badge.style.display = 'inline';
 
-        container.innerHTML = cart.map(item => `
+        container.innerHTML = cart.map(item => {
+            const key = JSON.stringify(item._cartKey || item.id);
+            const maxStock = item._maxStock || (products.find(p=>p.id===item.id)?.quantity_in_stock||99);
+            const label = item.name + (item.variant_id ? ` <span style="font-size:0.75rem;color:var(--text-muted);background:var(--bg-base);padding:1px 5px;border-radius:4px;">${esc(item._cartKey?.split('_v')[1] ? 'Variant' : '')}</span>` : '');
+            return `
             <div class="pos-cart-item">
                 <div style="flex:1; min-width:0;">
-                    <div class="pos-cart-item-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}</div>
+                    <div class="pos-cart-item-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.name}${item.variant_id ? ' <small style="color:var(--text-muted);">(variant)</small>' : ''}</div>
                     <div class="pos-cart-item-price">$${parseFloat(item.selling_price).toFixed(2)} × ${item.quantity} = <strong>$${(item.selling_price * item.quantity).toFixed(2)}</strong></div>
                 </div>
                 <div style="display:flex; align-items:center; gap:0.4rem; flex-shrink:0;">
-                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${item.id}, ${item.quantity - 1})">−</button>
-                    <input type="number" value="${item.quantity}" min="1" max="${products.find(p=>p.id===item.id)?.quantity_in_stock||99}"
+                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${key}, ${item.quantity - 1})">−</button>
+                    <input type="number" value="${item.quantity}" min="1" max="${maxStock}"
                         style="width:48px; text-align:center; padding:2px 4px; border:1px solid var(--border-subtle); border-radius:6px; font-size:0.85rem;"
-                        onchange="updateCartQty(${item.id}, this.value)">
-                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${item.id}, ${item.quantity + 1})">+</button>
-                    <button class="btn btn-sm" style="padding:2px 8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5;" onclick="updateCartQty(${item.id}, 0)">×</button>
+                        onchange="updateCartQty(${key}, this.value)">
+                    <button class="btn btn-secondary btn-sm" style="padding:2px 8px;" onclick="updateCartQty(${key}, ${item.quantity + 1})">+</button>
+                    <button class="btn btn-sm" style="padding:2px 8px; background:#fee2e2; color:#ef4444; border:1px solid #fca5a5;" onclick="updateCartQty(${key}, 0)">×</button>
                 </div>
             </div>
-        `).join('');
+        `}).join('');
 
         const total = cart.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
         document.getElementById('pos-total').textContent = `$${total.toFixed(2)}`;
@@ -527,7 +527,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     customer_id: parseInt(cId),
-                    items: cart.map(i => ({ product_id: i.id, quantity: i.quantity, price: i.selling_price })),
+                    items: cart.map(i => ({ product_id: i.id, variant_id: i.variant_id || null, quantity: i.quantity, price: i.selling_price })),
                     amount_paid: amountPaid,
                     payment_method: paymentMethod,
                 })
@@ -594,5 +594,183 @@
             });
         }
     }
+
+    /* ── Hold & Resume ───────────────────────────────────────────────────── */
+    function _getHeldCarts() {
+        try { return JSON.parse(localStorage.getItem('pos_held_carts') || '[]'); } catch { return []; }
+    }
+    function _saveHeldCarts(arr) { localStorage.setItem('pos_held_carts', JSON.stringify(arr)); }
+
+    function holdCart() {
+        if (cart.length === 0) { showToast('Nothing in the basket to hold.', 'warning'); return; }
+        const custId   = document.getElementById('pos-customer').value;
+        const custName = document.getElementById('cust-selected-name').textContent || 'No customer';
+        const held = _getHeldCarts();
+        held.push({
+            id: Date.now(),
+            label: `${custId ? custName : 'No customer'} — ${cart.length} item(s)`,
+            cart: JSON.parse(JSON.stringify(cart)),
+            customer_id: custId,
+            customer_name: custName,
+            payment_method: document.getElementById('pos-payment-method').value,
+            saved_at: new Date().toLocaleTimeString(),
+        });
+        _saveHeldCarts(held);
+        cart = [];
+        renderCart();
+        clearCustomer();
+        updateHeldBadge();
+        showToast('Transaction held. You can resume it any time.', 'success');
+    }
+
+    function updateHeldBadge() {
+        const held = _getHeldCarts();
+        const btn = document.getElementById('held-count-btn');
+        const cnt = document.getElementById('held-count');
+        if (held.length > 0) {
+            btn.style.display = '';
+            cnt.textContent = held.length;
+        } else {
+            btn.style.display = 'none';
+        }
+    }
+
+    function openHeldCarts() {
+        const held = _getHeldCarts();
+        const list = document.getElementById('held-list');
+        if (held.length === 0) {
+            list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;text-align:center;padding:1rem;">No held transactions.</p>';
+        } else {
+            list.innerHTML = held.map(h => `
+                <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:0.75rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;font-size:0.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(h.label)}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);">Held at ${esc(h.saved_at)}</div>
+                    </div>
+                    <div style="display:flex;gap:0.4rem;flex-shrink:0;">
+                        <button class="btn btn-primary btn-sm" onclick="resumeCart(${h.id})">▶ Resume</button>
+                        <button class="btn btn-sm" style="background:#fee2e2;color:#ef4444;border:1px solid #fca5a5;" onclick="deleteHeld(${h.id})">✕</button>
+                    </div>
+                </div>`).join('');
+        }
+        document.getElementById('held-modal').classList.add('active');
+    }
+
+    function resumeCart(id) {
+        const held = _getHeldCarts();
+        const entry = held.find(h => h.id === id);
+        if (!entry) return;
+        if (cart.length > 0 && !confirm('This will replace your current basket. Continue?')) return;
+        cart = entry.cart;
+        // Restore customer
+        if (entry.customer_id) {
+            document.getElementById('pos-customer').value = entry.customer_id;
+            document.getElementById('cust-selected-name').textContent = entry.customer_name || '';
+            document.getElementById('cust-selected').style.display = 'flex';
+            document.getElementById('cust-search-wrapper').style.display = 'none';
+        }
+        // Restore payment method
+        const methodBtn = document.querySelector(`.pay-method-btn[data-method="${entry.payment_method}"]`);
+        if (methodBtn) selectPayMethod(methodBtn);
+        // Remove from held list
+        _saveHeldCarts(held.filter(h => h.id !== id));
+        renderCart();
+        updateHeldBadge();
+        document.getElementById('held-modal').classList.remove('active');
+        showToast('Transaction resumed.', 'success');
+    }
+
+    function deleteHeld(id) {
+        const held = _getHeldCarts().filter(h => h.id !== id);
+        _saveHeldCarts(held);
+        openHeldCarts();
+        updateHeldBadge();
+    }
+
+    /* ── Variant Picker ──────────────────────────────────────────────────── */
+    async function addToCart(pId) {
+        const p = products.find(x => x.id === pId);
+        if (!p || p.quantity_in_stock <= 0) return;
+
+        // Check if product has variants
+        try {
+            const res = await fetch(`/api/products/${pId}/variants`);
+            if (res.ok) {
+                const variants = await res.json();
+                if (variants.length > 0) {
+                    openVariantPicker(p, variants);
+                    return;
+                }
+            }
+        } catch (_) {}
+
+        // No variants — add directly
+        _addProductToCart(pId, null, null);
+    }
+
+    function openVariantPicker(product, variants) {
+        document.getElementById('variant-modal-title').textContent = `${product.name} — Select Variant`;
+        const list = document.getElementById('variant-list');
+        list.innerHTML = variants.map(v => {
+            const finalPrice = (product.selling_price + (v.price_adjustment || 0)).toFixed(2);
+            const adj = v.price_adjustment > 0 ? ` (+$${v.price_adjustment.toFixed(2)})` : v.price_adjustment < 0 ? ` (-$${Math.abs(v.price_adjustment).toFixed(2)})` : '';
+            const oos = v.quantity_in_stock <= 0;
+            return `
+                <div class="pos-product-card ${oos ? 'out-of-stock' : ''}"
+                     onclick="${oos ? 'void(0)' : `pickVariant(${product.id}, ${v.id}, ${v.price_adjustment || 0}, ${v.quantity_in_stock})`}"
+                     style="flex-direction:row;justify-content:space-between;align-items:center;padding:0.75rem 1rem;text-align:left;">
+                    <div>
+                        <div style="font-weight:600;font-size:0.88rem;">${esc(v.name)}${v.sku_suffix ? ` <span style="font-size:0.72rem;color:var(--text-muted);">[${esc(v.sku_suffix)}]</span>` : ''}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);">$${finalPrice}${adj} · ${oos ? '<span style="color:#ef4444;">Out of stock</span>' : v.quantity_in_stock + ' in stock'}</div>
+                    </div>
+                    ${!oos ? '<span style="font-size:1.2rem;">➕</span>' : ''}
+                </div>`;
+        }).join('');
+        document.getElementById('variant-modal').classList.add('active');
+    }
+
+    function pickVariant(pId, variantId, priceAdj, variantStock) {
+        document.getElementById('variant-modal').classList.remove('active');
+        _addProductToCart(pId, variantId, priceAdj, variantStock);
+    }
+
+    function _addProductToCart(pId, variantId, priceAdj, variantStock) {
+        const p = products.find(x => x.id === pId);
+        if (!p) return;
+        const cartKey = variantId ? `${pId}_v${variantId}` : String(pId);
+        const effectivePrice = variantId ? (p.selling_price + (priceAdj || 0)) : p.selling_price;
+        const maxStock = variantId ? (variantStock ?? p.quantity_in_stock) : p.quantity_in_stock;
+        if (maxStock <= 0) return;
+
+        const existing = cart.find(x => x._cartKey === cartKey);
+        if (existing) {
+            if (existing.quantity >= maxStock) { showToast('No more stock available!', 'warning'); return; }
+            existing.quantity++;
+        } else {
+            cart.push({ ...p, _cartKey: cartKey, variant_id: variantId || null, selling_price: effectivePrice, quantity: 1, _maxStock: maxStock });
+        }
+        renderCart();
+    }
+
+    // Override renderCart to use _cartKey and _maxStock
+    // updateCartQty uses _cartKey (replaces old id-based version)
+    function updateCartQty(cartKey, val) {
+        const qty = parseInt(val);
+        const item = cart.find(x => x._cartKey === cartKey);
+        if (!item) return;
+        const maxStock = item._maxStock || (products.find(p => p.id === item.id)?.quantity_in_stock || 99);
+        if (isNaN(qty) || qty <= 0) {
+            cart = cart.filter(x => x._cartKey !== cartKey);
+        } else if (qty > maxStock) {
+            showToast('Not enough stock!', 'warning');
+            return;
+        } else {
+            item.quantity = qty;
+        }
+        renderCart();
+    }
+
+    // Init held badge on load
+    document.addEventListener('DOMContentLoaded', updateHeldBadge);
 </script>
 {% endblock %}

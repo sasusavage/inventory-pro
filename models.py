@@ -26,6 +26,10 @@ AVAILABLE_MODULES = {
     'multi_branch':      'Multi-Branch',
     'pnl_report':        'P&L Report',
     'top_customers':     'Top Customers Leaderboard',
+    'product_variants':  'Product Variants (size/colour)',
+    'stock_transfers':   'Branch Stock Transfers',
+    'sms_receipts':      'SMS Receipts',
+    'eod_report':        'End-of-Day Cash Report',
 }
 
 # Modules enabled by default for every new organisation
@@ -616,3 +620,48 @@ class StockAdjustment(db.Model):
 
     product = db.relationship('Product', backref=db.backref('adjustments', lazy=True))
     user    = db.relationship('User')
+
+
+class ProductVariant(db.Model):
+    """
+    Size / colour / other variants for a product.
+    Each variant has its own stock level and optional price adjustment.
+    """
+    __tablename__ = 'product_variants'
+    id               = db.Column(db.Integer, primary_key=True)
+    organisation_id  = db.Column(db.Integer, db.ForeignKey('organisations.id'),
+                                 nullable=False, index=True)
+    product_id       = db.Column(db.Integer, db.ForeignKey('products.id'),
+                                 nullable=False, index=True)
+    name             = db.Column(db.String(80), nullable=False)   # e.g. "M / Red"
+    attributes       = db.Column(db.JSON, nullable=True)           # {"size":"M","color":"Red"}
+    sku_suffix       = db.Column(db.String(40), nullable=True)     # appended to parent SKU
+    price_adjustment = db.Column(db.Float, default=0.0)           # +/- from base price
+    quantity_in_stock= db.Column(db.Integer, default=0)
+    is_active        = db.Column(db.Boolean, default=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+    product = db.relationship('Product', backref=db.backref('variants', lazy=True))
+
+
+class StockTransfer(db.Model):
+    """Transfer of stock between branches within an organisation."""
+    __tablename__ = 'stock_transfers'
+    id              = db.Column(db.Integer, primary_key=True)
+    organisation_id = db.Column(db.Integer, db.ForeignKey('organisations.id'),
+                                nullable=False, index=True)
+    from_branch_id  = db.Column(db.Integer, db.ForeignKey('branches.id'), nullable=False)
+    to_branch_id    = db.Column(db.Integer, db.ForeignKey('branches.id'), nullable=False)
+    product_id      = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    quantity        = db.Column(db.Integer, nullable=False)
+    status          = db.Column(db.String(20), default='pending', index=True)
+    # status: pending | completed | cancelled
+    notes           = db.Column(db.Text, nullable=True)
+    created_by      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    completed_at    = db.Column(db.DateTime, nullable=True)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    from_branch  = db.relationship('Branch', foreign_keys=[from_branch_id])
+    to_branch    = db.relationship('Branch', foreign_keys=[to_branch_id])
+    product      = db.relationship('Product')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])

@@ -44,7 +44,7 @@
                         <span style="font-size:.7rem; color:var(--text-muted); padding:.25rem .75rem; text-transform:uppercase; letter-spacing:.5px;">Test Workspace</span>
                     </li>
                     <li class="nav-item">
-                        <a href="/" class="nav-link" id="nav-sa-shop"><span class="nav-icon">🧪</span>Test Features</a>
+                        <a href="/superadmin/test-features" class="nav-link" id="nav-sa-shop"><span class="nav-icon">🧪</span>Test Features</a>
                     </li>
                 </ul>
 
@@ -89,6 +89,12 @@
                     {% if mod_stock_adj %}<li class="nav-item admin-only" data-module="stock_adjustments">
                         <a href="/stock-adjustments-page" class="nav-link" id="nav-stock-adj"><span class="nav-icon">🔧</span>Stock Adjustments</a>
                     </li>{% endif %}
+                    <li class="nav-item admin-only">
+                        <a href="/stock-transfers-page" class="nav-link" id="nav-transfers"><span class="nav-icon">🔄</span>Stock Transfers</a>
+                    </li>
+                    <li class="nav-item admin-only">
+                        <a href="/eod-page" class="nav-link" id="nav-eod"><span class="nav-icon">🌙</span>EOD Report</a>
+                    </li>
                     {% if mod_categories %}<li class="nav-item admin-only" data-module="categories">
                         <a href="/categories-page" class="nav-link" id="nav-categories"><span class="nav-icon">🏷️</span>Categories</a>
                     </li>{% endif %}

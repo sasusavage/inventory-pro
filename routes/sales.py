@@ -226,6 +226,28 @@ def create_sale():
         except Exception:
             loyalty_balance = None
 
+        # Send SMS receipt if customer has phone and SMS is configured
+        try:
+            customer = Customer.query.get(data['customer_id'])
+            if customer and customer.phone:
+                from models import AppSetting
+                if AppSetting.get('sms_enabled', '0') == '1':
+                    from sms_helper import send_sms_receipt
+                    items_txt = ', '.join(
+                        f"{it['quantity']}x {Product.query.get(it['product_id']).name}"
+                        for it in data['items']
+                    )
+                    sms_msg = (
+                        f"Receipt from {AppSetting.get('store_name','Your Store')}\n"
+                        f"Items: {items_txt}\n"
+                        f"Total: {new_sale.total_amount:.2f} | Paid: {amount_paid:.2f}\n"
+                        f"Status: {new_sale.payment_status}\n"
+                        f"Thank you!"
+                    )
+                    send_sms_receipt(g.org_id, customer.phone, sms_msg)
+        except Exception:
+            pass  # SMS failure must never break a sale
+
         return jsonify({
             'message': 'Sale completed',
             'id': new_sale.id,
