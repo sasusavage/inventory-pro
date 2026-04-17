@@ -193,28 +193,24 @@ def impersonate_tenant(org_id):
 @superadmin_bp.route('/test-features')
 @super_admin_required
 def test_features():
-    """Auto-impersonate the first real tenant so super admin can browse shop features."""
-    from flask import redirect
-    org = Organisation.query.filter(Organisation.id != 2).order_by(Organisation.id).first()
-    if not org:
-        # No real tenants yet — just go to the tenant dashboard as-is
-        return redirect('/')
-    # Reuse the impersonation logic
-    session['impersonating_org_id']   = org.id
-    session['impersonating_org_name'] = org.name
+    """
+    Enter the super-admin's own sandbox (org 2 — Platform Admin) as an admin
+    so all modules are visible and testable without touching any real tenant data.
+    """
+    from flask import redirect, g as _g
+    # Sandbox is org 2 (Platform Admin) — super admin's own isolated workspace
+    sandbox_org_id = 2
+    # Save real super-admin identity so we can exit
+    session['impersonating_org_id']   = sandbox_org_id
+    session['impersonating_org_name'] = '🧪 Sandbox (Test Mode)'
     session['real_user_id']           = session.get('user_id')
     session['real_username']          = session.get('username')
     session['real_role']              = session.get('role')
     session['real_org_id']            = session.get('org_id')
-    session['org_id'] = org.id
-    tenant_admin = User.query.filter_by(organisation_id=org.id, role='admin').first() \
-                or User.query.filter_by(organisation_id=org.id).first()
-    if tenant_admin:
-        session['user_id']  = tenant_admin.id
-        session['username'] = tenant_admin.username
-        session['role']     = tenant_admin.role
-    else:
-        session['role'] = 'admin'
+    # Switch to sandbox org — keep the super admin's own user_id & username
+    # but change role to 'admin' so the tenant sidebar renders
+    session['org_id'] = sandbox_org_id
+    session['role']   = 'admin'
     return redirect('/')
 
 

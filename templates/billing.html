@@ -41,6 +41,10 @@
 .badge-trial { background:#f59e0b22; color:#f59e0b; border:1px solid #f59e0b44; }
 .badge-active { background:#10b98122; color:#10b981; border:1px solid #10b98144; }
 .badge-expired { background:#ef444422; color:#ef4444; border:1px solid #ef444444; }
+.plan-features li { list-style:none; font-size:.8rem; display:flex; gap:.4rem; color:var(--text-main); }
+.plan-features li::before { content:''; }
+.plan-features .excl { color:var(--text-muted); }
+.plan-excl li::before { content:''; }
 </style>
 
 <script>
@@ -97,22 +101,32 @@ function renderBilling(d) {
 
     const planTiles = plans.map(p => {
         const isCurrent = plan && plan.id === p.id;
+        const mods = p.modules || { included: [], excluded: [] };
+        const branchLabel   = p.max_branches >= 999  ? 'Unlimited' : p.max_branches;
+        const staffLabel    = p.max_staff    >= 999  ? 'Unlimited' : p.max_staff;
+        const productLabel  = p.max_products >= 9999999 ? 'Unlimited' : p.max_products.toLocaleString();
+        const includedRows  = mods.included.map(m => `<li>✓ ${esc(m)}</li>`).join('');
+        const excludedRows  = mods.excluded.map(m => `<li class="excl">✗ ${esc(m)}</li>`).join('');
         return `
         <div class="plan-tile ${isCurrent ? 'current' : ''}">
-            ${isCurrent ? '<div style="font-size:.7rem;font-weight:700;color:var(--accent-primary);margin-bottom:.5rem;">✓ CURRENT PLAN</div>' : ''}
+            ${isCurrent ? '<div style="font-size:.7rem;font-weight:700;color:var(--accent-primary);margin-bottom:.5rem;">✓ YOUR CURRENT PLAN</div>' : ''}
             <h3>${esc(p.name)}</h3>
             <div class="plan-price">GHS ${p.price_monthly}<small>/mo</small></div>
-            <ul class="plan-features">
-                <li>${p.max_branches >= 999 ? 'Unlimited' : p.max_branches} Branch${p.max_branches !== 1 ? 'es' : ''}</li>
-                <li>${p.max_users >= 999 ? 'Unlimited' : p.max_users} Staff</li>
-                <li>${p.max_products >= 9999999 ? 'Unlimited' : p.max_products.toLocaleString()} Products</li>
-            </ul>
+            <div style="font-size:.75rem;color:var(--text-muted);margin:.5rem 0 .9rem;display:flex;gap:.75rem;flex-wrap:wrap;">
+                <span>🏢 ${branchLabel} branch${p.max_branches !== 1 ? 'es' : ''}</span>
+                <span>👤 ${staffLabel} staff</span>
+                <span>📦 ${productLabel} products</span>
+            </div>
+            <ul class="plan-features" style="margin-bottom:.75rem;">${includedRows}</ul>
+            ${excludedRows ? `<ul class="plan-features plan-excl">${excludedRows}</ul>` : ''}
+            <div style="margin-top:1rem;">
             ${isCurrent
                 ? '<button class="btn btn-secondary btn-sm" style="width:100%;" disabled>Current Plan</button>'
                 : `<button class="btn btn-primary btn-sm" style="width:100%;" onclick="upgradeTo(${p.id}, '${esc(p.name)}', ${p.price_monthly})">
                     ${plan && p.price_monthly > plan.price_monthly ? '⬆ Upgrade' : plan && p.price_monthly < plan.price_monthly ? '⬇ Downgrade' : 'Select'} to ${esc(p.name)}
                    </button>`
             }
+            </div>
         </div>`;
     }).join('');
 

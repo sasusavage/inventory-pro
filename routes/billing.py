@@ -11,6 +11,54 @@ from decorators import login_required
 
 billing_bp = Blueprint('billing', __name__)
 
+# Modules included per plan tier (by display_name keyword match)
+_PLAN_MODULES = {
+    'starter': {
+        'included': [
+            'Point of Sale (POS)', 'Inventory Management', 'Customer Management',
+            'Product Categories', 'Sales Reports', 'Stock Adjustments',
+        ],
+        'excluded': [
+            'Purchase Orders', 'Loyalty Points', 'Supplier Management',
+            'P&L Report', 'Expense Tracking', 'AI Analytics',
+            'Branch Stock Transfers', 'SMS Receipts', 'EOD Report',
+        ],
+    },
+    'growth': {
+        'included': [
+            'Everything in Starter', 'Purchase Orders', 'Refunds & Returns',
+            'Supplier Management', 'Loyalty Points', 'P&L Report',
+            'Top Customers', 'Expense Tracking', 'Activity Log',
+        ],
+        'excluded': ['AI Analytics', 'Branch Stock Transfers', 'SMS Receipts', 'EOD Report'],
+    },
+    'pro': {
+        'included': [
+            'Everything in Growth', 'AI Analytics & Insights',
+            'Product Variants (size/colour)', 'Branch Stock Transfers',
+            'SMS Receipts', 'End-of-Day Cash Report',
+            'Telegram Notifications', 'Priority Support',
+        ],
+        'excluded': ['White-label / Custom Domain'],
+    },
+    'enterprise': {
+        'included': [
+            'Everything in Pro', 'White-label Branding', 'Custom Domain',
+            'Dedicated Support & SLA', 'Custom Integrations',
+            'Bulk Import', 'On-site Training',
+        ],
+        'excluded': [],
+    },
+}
+
+
+def _plan_modules(display_name: str) -> dict:
+    key = (display_name or '').lower()
+    for tier, data in _PLAN_MODULES.items():
+        if tier in key:
+            return data
+    return {'included': [], 'excluded': []}
+
 
 def _get_subscription(org_id):
     return (Subscription.query
@@ -78,6 +126,7 @@ def billing_status():
             'trial_days':    p.trial_days,
             'sort_order':    p.sort_order,
             'is_active':     p.is_active,
+            'modules':       _plan_modules(p.display_name),
         } for p in plans],
     })
 

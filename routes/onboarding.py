@@ -128,3 +128,35 @@ def signup():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': 'Registration failed. Please try again.'}), 500
+
+
+@onboarding_bp.route('/api/demo-request', methods=['POST'])
+def demo_request():
+    """Public endpoint — store demo booking requests and optionally notify via Telegram."""
+    data = request.json or {}
+    name     = (data.get('name') or '').strip()
+    phone    = (data.get('phone') or '').strip()
+    biz_name = (data.get('business_name') or '').strip()
+    if not name or not phone or not biz_name:
+        return jsonify({'error': 'name, phone, and business_name are required'}), 400
+
+    # Notify via Telegram if configured (org 2 = Platform Admin)
+    try:
+        from models import AppSetting
+        biz_type = data.get('business_type', '—')
+        branches = data.get('branches', '—')
+        notes    = data.get('notes', '')
+        msg = (
+            f"📅 <b>New Demo Request</b>\n\n"
+            f"👤 <b>{name}</b>\n"
+            f"📞 {phone}\n"
+            f"🏪 {biz_name} ({biz_type})\n"
+            f"🏢 Branches: {branches}\n"
+            + (f"📝 {notes}\n" if notes else "")
+        )
+        from notifications import notify_async
+        notify_async(msg)
+    except Exception:
+        pass  # never block the response
+
+    return jsonify({'message': 'Demo request received'}), 201
