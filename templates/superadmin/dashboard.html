@@ -2,40 +2,121 @@
 {% block title %}Super Admin — InventoryPro{% endblock %}
 {% block content %}
 <header class="page-header">
-    <h2 class="page-title">🛡️ Super Admin Dashboard</h2>
-    <a href="/superadmin/tenants" class="btn btn-primary btn-sm">Manage Tenants</a>
+    <h2 class="page-title">🛡️ Platform Overview</h2>
+    <div style="display:flex;gap:.5rem;">
+        <a href="/superadmin/tenants" class="btn btn-secondary btn-sm">🏢 All Tenants</a>
+        <a href="/superadmin/test-features" class="btn btn-primary btn-sm">🧪 Test Features</a>
+    </div>
 </header>
 
-<div id="stats-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem;">
-    <div class="card stat-card"><h4>Total Tenants</h4><p id="s-total">—</p></div>
-    <div class="card stat-card"><h4>Active Tenants</h4><p id="s-active">—</p></div>
-    <div class="card stat-card"><h4>Total Users</h4><p id="s-users">—</p></div>
+<!-- KPI Cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:1rem;margin-bottom:1.5rem;">
+    <div class="card" style="padding:1.25rem;text-align:center;">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;">Total Tenants</div>
+        <div id="s-total" style="font-size:2rem;font-weight:900;color:var(--accent-primary);">—</div>
+        <div id="s-new" style="font-size:.72rem;color:var(--text-muted);margin-top:.2rem;"></div>
+    </div>
+    <div class="card" style="padding:1.25rem;text-align:center;">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;">Active</div>
+        <div id="s-active" style="font-size:2rem;font-weight:900;color:#10b981;">—</div>
+    </div>
+    <div class="card" style="padding:1.25rem;text-align:center;">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;">Suspended</div>
+        <div id="s-suspended" style="font-size:2rem;font-weight:900;color:#f59e0b;">—</div>
+    </div>
+    <div class="card" style="padding:1.25rem;text-align:center;">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;">Total Users</div>
+        <div id="s-users" style="font-size:2rem;font-weight:900;">—</div>
+    </div>
+    <div class="card" style="padding:1.25rem;text-align:center;border-color:#10b981;">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;">Monthly Revenue</div>
+        <div id="s-mrr" style="font-size:1.7rem;font-weight:900;color:#10b981;">—</div>
+        <div style="font-size:.7rem;color:var(--text-muted);">GHS / month</div>
+    </div>
 </div>
 
-<div class="card" style="padding:1.25rem;">
-    <h3 style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">PLAN DISTRIBUTION</h3>
-    <div id="plan-dist"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+    <!-- Plan Distribution -->
+    <div class="card" style="padding:1.25rem;">
+        <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;">📊 Plan Distribution</h3>
+        <div id="plan-dist"><p style="color:var(--text-muted);font-size:.85rem;">Loading…</p></div>
+    </div>
+
+    <!-- Recent Tenants -->
+    <div class="card" style="padding:1.25rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+            <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:0;">🕐 Recent Signups</h3>
+            <a href="/superadmin/tenants" style="font-size:.78rem;color:var(--accent-primary);">View all →</a>
+        </div>
+        <div id="recent-tenants"><p style="color:var(--text-muted);font-size:.85rem;">Loading…</p></div>
+    </div>
 </div>
 
-<style>
-.stat-card { text-align:center; padding:1.25rem; }
-.stat-card h4 { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:.4rem; }
-.stat-card p  { font-size:1.8rem; font-weight:800; }
-</style>
+<!-- Quick Actions -->
+<div class="card" style="padding:1.25rem;margin-top:1.25rem;">
+    <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;">⚡ Quick Actions</h3>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+        <a href="/superadmin/tenants" class="btn btn-secondary">🏢 Manage Tenants</a>
+        <a href="/superadmin/domains" class="btn btn-secondary">🌐 Domain Requests</a>
+        <a href="/superadmin/test-features" class="btn btn-secondary">🧪 Test All Features</a>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
-    const d = await fetch('/superadmin/api/stats').then(r => r.json());
-    document.getElementById('s-total').textContent  = d.total_tenants;
-    document.getElementById('s-active').textContent = d.active_tenants;
-    document.getElementById('s-users').textContent  = d.total_users;
+    try {
+        const res = await fetch('/superadmin/api/stats');
+        const d   = await res.json();
 
-    const pd = document.getElementById('plan-dist');
-    if (!d.plan_distribution?.length) { pd.innerHTML = '<p style="color:var(--text-muted);">No active subscriptions yet.</p>'; return; }
-    pd.innerHTML = d.plan_distribution.map(r =>
-        `<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed var(--border-subtle);">
-            <span>${r.plan}</span><strong>${r.count}</strong>
-        </div>`
-    ).join('');
+        document.getElementById('s-total').textContent     = d.total_tenants;
+        document.getElementById('s-active').textContent    = d.active_tenants;
+        document.getElementById('s-suspended').textContent = d.suspended_tenants || 0;
+        document.getElementById('s-users').textContent     = d.total_users;
+        document.getElementById('s-mrr').textContent       = 'GHS ' + (d.mrr || 0).toLocaleString();
+        if (d.new_last_30d > 0) {
+            document.getElementById('s-new').textContent = `+${d.new_last_30d} this month`;
+        }
+
+        // Plan distribution
+        const pd = document.getElementById('plan-dist');
+        if (!d.plan_distribution?.length) {
+            pd.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;">No active paid subscriptions yet.</p>';
+        } else {
+            const total = d.plan_distribution.reduce((s, r) => s + r.count, 0);
+            pd.innerHTML = d.plan_distribution.map(r => {
+                const pct = Math.round((r.count / total) * 100);
+                return `
+                <div style="margin-bottom:.85rem;">
+                    <div style="display:flex;justify-content:space-between;font-size:.83rem;margin-bottom:.3rem;">
+                        <span style="font-weight:600;">${r.plan}</span>
+                        <span style="color:var(--text-muted);">${r.count} tenant${r.count !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div style="height:6px;background:var(--border-subtle);border-radius:3px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:var(--accent-primary);border-radius:3px;transition:width .4s;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Recent tenants
+        const rt = document.getElementById('recent-tenants');
+        if (!d.recent_tenants?.length) {
+            rt.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;">No tenants yet.</p>';
+        } else {
+            rt.innerHTML = d.recent_tenants.map(o => `
+                <a href="/superadmin/tenants/${o.id}" style="display:flex;justify-content:space-between;align-items:center;padding:.5rem 0;border-bottom:1px solid var(--border-subtle);text-decoration:none;color:inherit;">
+                    <div>
+                        <div style="font-weight:600;font-size:.88rem;">${esc(o.name)}</div>
+                        <div style="font-size:.73rem;color:var(--text-muted);">${esc(o.slug)} · ${o.created_at ? new Date(o.created_at).toLocaleDateString() : '—'}</div>
+                    </div>
+                    <span class="badge ${o.is_active ? 'badge-success' : 'badge-warning'}" style="font-size:.68rem;">${o.is_active ? 'Active' : 'Suspended'}</span>
+                </a>`).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load stats', e);
+    }
 });
+
+function esc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 </script>
 {% endblock %}

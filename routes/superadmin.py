@@ -62,23 +62,57 @@ def tenant_detail(org_id):
 @super_admin_required
 def api_stats():
     from sqlalchemy import func
-    total_tenants  = Organisation.query.count()
-    active_tenants = Organisation.query.filter_by(is_active=True).count()
-    total_users    = User.query.count()
+    from datetime import datetime, timedelta
+
+    # Exclude org 2 (Platform Admin / sandbox) from all tenant stats
+    real_orgs = Organisation.query.filter(Organisation.id != 2)
+    total_tenants  = real_orgs.count()
+    active_tenants = real_orgs.filter_by(is_active=True).count()
+    total_users    = User.query.filter(User.organisation_id != 2).count()
+
+    # MRR from active subscriptions (real tenants only)
+    mrr_row = (
+        db.session.query(func.coalesce(func.sum(Plan.price_monthly), 0))
+        .join(Subscription, Subscription.plan_id == Plan.id)
+        .join(Organisation, Organisation.id == Subscription.organisation_id)
+        .filter(Subscription.status == 'active', Organisation.id != 2)
+        .scalar()
+    )
+    mrr = float(mrr_row or 0)
 
     plan_dist = (
-        db.session.query(Plan.name, db.func.count(Subscription.id).label('cnt'))
+        db.session.query(Plan.display_name, func.count(Subscription.id).label('cnt'))
         .join(Subscription, Subscription.plan_id == Plan.id)
-        .filter(Subscription.status == 'active')
-        .group_by(Plan.name)
+        .join(Organisation, Organisation.id == Subscription.organisation_id)
+        .filter(Subscription.status == 'active', Organisation.id != 2)
+        .group_by(Plan.display_name)
         .all()
     )
 
+    # New tenants in last 30 days
+    thirty_ago = datetime.utcnow() - timedelta(days=30)
+    new_tenants = real_orgs.filter(Organisation.created_at >= thirty_ago).count()
+
+    # Recent 5 tenants
+    recent = (real_orgs
+              .order_by(Organisation.created_at.desc())
+              .limit(5).all())
+
     return jsonify({
-        'total_tenants':  total_tenants,
-        'active_tenants': active_tenants,
-        'total_users':    total_users,
-        'plan_distribution': [{'plan': r.name, 'count': r.cnt} for r in plan_dist],
+        'total_tenants':   total_tenants,
+        'active_tenants':  active_tenants,
+        'suspended_tenants': total_tenants - active_tenants,
+        'total_users':     total_users,
+        'mrr':             mrr,
+        'new_last_30d':    new_tenants,
+        'plan_distribution': [{'plan': r.display_name, 'count': r.cnt} for r in plan_dist],
+        'recent_tenants': [{
+            'id':        o.id,
+            'name':      o.name,
+            'slug':      o.slug,
+            'is_active': o.is_active,
+            'created_at': o.created_at.isoformat() if o.created_at else None,
+        } for o in recent],
     })
 
 

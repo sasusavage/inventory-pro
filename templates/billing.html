@@ -51,8 +51,18 @@
 document.addEventListener('DOMContentLoaded', loadBilling);
 
 async function loadBilling() {
-    const d = await fetch('/api/billing/status').then(r => r.json());
-    renderBilling(d);
+    try {
+        const res = await fetch('/api/billing/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        renderBilling(d);
+    } catch (err) {
+        document.getElementById('billing-content').innerHTML =
+            `<div class="card" style="padding:1.5rem;color:#ef4444;">
+                ⚠️ Failed to load billing data. <button class="btn btn-secondary btn-sm" style="margin-left:.5rem;" onclick="loadBilling()">Retry</button>
+                <br><small style="color:var(--text-muted);">${err.message}</small>
+            </div>`;
+    }
 }
 
 function renderBilling(d) {
@@ -76,7 +86,7 @@ function renderBilling(d) {
         <div class="card" style="padding:1.25rem; margin-bottom:1rem;">
             <h3 style="font-size:.82rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;">USAGE</h3>
             ${usageItem('Products', usage.products, plan.max_products)}
-            ${usageItem('Staff Accounts', usage.users, plan.max_users)}
+            ${usageItem('Staff Accounts', usage.users, plan.max_staff)}
             ${usageItem('Branches', usage.branches, plan.max_branches)}
         </div>`;
     }
@@ -91,7 +101,7 @@ function renderBilling(d) {
                 </div>
                 <div style="text-align:right;">
                     ${statusBadge}
-                    ${sub.current_period_end ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem;">Renews ${new Date(sub.current_period_end).toLocaleDateString()}</div>` : ''}
+                    ${sub.expires_at ? `<div style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem;">Renews ${new Date(sub.expires_at).toLocaleDateString()}</div>` : ''}
                 </div>
             </div>
         </div>` : `
@@ -144,9 +154,10 @@ function renderBilling(d) {
 }
 
 function usageItem(label, current, max) {
-    const pct = max >= 999 ? 0 : Math.min(100, Math.round((current / max) * 100));
+    const unlimited = !max || max < 0 || max >= 9999;
+    const pct = unlimited ? 0 : Math.min(100, Math.round(((current || 0) / max) * 100));
     const cls = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
-    const maxLabel = max >= 999 ? '∞' : max.toLocaleString();
+    const maxLabel = unlimited ? '∞' : (max || 0).toLocaleString();
     return `
     <div style="margin-bottom:.9rem;">
         <div style="display:flex;justify-content:space-between;font-size:.83rem;margin-bottom:.3rem;">

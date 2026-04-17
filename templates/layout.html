@@ -123,9 +123,14 @@
         <!-- Main Content -->
         <main class="main-content">
             {% if session.get('impersonating_org_name') %}
-            <div id="impersonation-banner" style="background:#f59e0b;color:#000;padding:.6rem 1rem;display:flex;align-items:center;justify-content:space-between;font-size:.85rem;font-weight:600;gap:1rem;flex-wrap:wrap;">
-                <span>👁️ Viewing as tenant: <strong>{{ session.get('impersonating_org_name') }}</strong> — changes you make affect their real data</span>
-                <a href="/superadmin/stop-impersonating" style="background:#000;color:#f59e0b;padding:.3rem .8rem;border-radius:.3rem;text-decoration:none;white-space:nowrap;">✕ Exit Tenant View</a>
+            {% set is_sandbox = session.get('impersonating_org_name', '').startswith('🧪') %}
+            <div id="impersonation-banner" style="background:{{ '#6366f1' if is_sandbox else '#f59e0b' }};color:#fff;padding:.55rem 1rem;display:flex;align-items:center;justify-content:space-between;font-size:.84rem;font-weight:600;gap:1rem;flex-wrap:wrap;">
+                {% if is_sandbox %}
+                <span>🧪 <strong>Sandbox / Test Mode</strong> — all modules enabled, demo data only. Nothing here is real.</span>
+                {% else %}
+                <span>👁️ Viewing as tenant: <strong>{{ session.get('impersonating_org_name') }}</strong> — changes affect their real data</span>
+                {% endif %}
+                <a href="/superadmin/stop-impersonating" style="background:rgba(0,0,0,.25);color:#fff;padding:.25rem .75rem;border-radius:.3rem;text-decoration:none;white-space:nowrap;">✕ Exit</a>
             </div>
             {% endif %}
             <header class="top-bar">
