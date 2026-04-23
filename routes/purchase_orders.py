@@ -169,7 +169,7 @@ def receive_po(po_id):
         # Telegram notification
         try:
             from notifications import notify_async
-            notify_async(
+            notify_async(session.get('org_id'), 
                 f"📦 <b>Purchase Order {'Fully' if all_done else 'Partially'} Received</b>\n\n"
                 f"🏷️ <b>PO #{po.id}</b> from {po.supplier.name}\n"
                 f"📋 <b>Items:</b> {', '.join(received_summary) or '—'}\n"

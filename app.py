@@ -51,6 +51,7 @@ def create_app(config=None):
     from routes.transfers import transfers_bp
     from routes.eod import eod_bp
     from telegram_bot import bot_bp
+    from routes.sms_webhooks import sms_webhook_bp
 
     for bp in (
         auth_bp, dashboard_bp, products_bp, sales_bp,
@@ -59,7 +60,7 @@ def create_app(config=None):
         ai_bp, analytics_bp, categories_bp, expenses_bp,
         stock_adj_bp, loyalty_bp, activity_bp, onboarding_bp,
         superadmin_bp, billing_bp, variants_bp, transfers_bp,
-        eod_bp, bot_bp,
+        eod_bp, bot_bp, sms_webhook_bp,
     ):
         app.register_blueprint(bp)
 

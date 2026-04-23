@@ -1,59 +1,79 @@
 """
-SMS receipt helper — Africa's Talking integration.
-Keys are stored in AppSetting per org:
-  sms_enabled  : '1' to enable
-  sms_username : AT username (use 'sandbox' for testing)
-  sms_api_key  : AT API key
-  sms_sender_id: optional sender ID
+Platform-Wide SMS Utility — Vynfy Implementation.
+This service uses a single, system-wide Vynfy account configured by the Super Admin.
+Tenants (Organisations) do NOT need their own API keys; the platform handles it.
 
-Usage:
-    from sms_helper import send_sms_receipt
-    send_sms_receipt(org_id, phone, message)   # fire and forget
+Environment Variables (to be set in .env):
+  VYNFY_API_KEY  : Platform-wide API Key
+  VYNFY_SENDER_ID: Platform-wide Sender ID (e.g., "InvPro")
 """
+import os
+import requests
 import threading
 import logging
 
 logger = logging.getLogger(__name__)
 
+def format_gh_number(number):
+    """Formats a Ghanaian number to the 233XXXXXXXXX format required by Vynfy."""
+    num = ''.join(filter(str.isdigit, str(number)))
+    if num.startswith('0') and len(num) == 10:
+        return '233' + num[1:]
+    if num.startswith('233') and len(num) == 12:
+        return num
+    return num
 
-def _send(org_id: int, phone: str, message: str):
+def _send_vynfy_platform(org_id: int, phone: str, message: str):
+    """
+    Core Vynfy sender using Platform-wide credentials from Environment Variables.
+    """
     try:
-        from models import AppSetting
-        enabled  = AppSetting.get('sms_enabled',   '0', org_id=org_id)
-        if str(enabled).strip() != '1':
+        from models import AppSetting, TenantModule
+        
+        # 1. Module & Toggle Check
+        # Ensure the 'sms_receipts' module is enabled for this organisation
+        if not TenantModule.is_enabled_for(org_id, 'sms_receipts'):
+            return
+            
+        # Ensure the tenant has actually opted-in to sending receipts
+        if AppSetting.get('sms_enabled', '0', org_id=org_id) != '1':
+            return
+            
+        # 2. Load Platform Credentials
+        api_key = os.environ.get('VYNFY_API_KEY')
+        sender_id = os.environ.get('VYNFY_SENDER_ID', 'InvPro')
+        
+        if not api_key:
+            logger.warning('SMS Platform Warning: VYNFY_API_KEY environment variable is missing!')
             return
 
-        username = AppSetting.get('sms_username', '', org_id=org_id).strip()
-        api_key  = AppSetting.get('sms_api_key',  '', org_id=org_id).strip()
-        if not username or not api_key:
-            logger.info('SMS skipped: keys not configured for org %s', org_id)
-            return
+        # 3. Message Personalisation
+        # Get the specific store name for this organisation
+        store_name = AppSetting.get('store_name', 'Your Shop', org_id=org_id)
+        final_message = f"[{store_name}] {message}"
+        
+        # 4. Prepare Payload
+        recipients = [format_gh_number(phone)]
+        payload = {
+            "message": final_message,
+            "recipients": recipients,
+            "sender": sender_id
+        }
+        headers = {
+            "X-API-Key": api_key,
+            "Content-Type": "application/json"
+        }
 
-        sender_id = AppSetting.get('sms_sender_id', None, org_id=org_id)
-        sender_id = sender_id.strip() if sender_id else None
-
-        import africastalking  # pip install africastalking
-        africastalking.initialize(username, api_key)
-        sms = africastalking.SMS
-
-        # Africa's Talking expects E.164 numbers e.g. +233241234567
-        # Attempt to normalise Ghanaian numbers
-        p = phone.strip().replace(' ', '').replace('-', '')
-        if p.startswith('0') and len(p) == 10:
-            p = '+233' + p[1:]
-        elif not p.startswith('+'):
-            p = '+' + p
-
-        resp = sms.send(message, [p], sender_id=sender_id)
-        logger.info('SMS sent to %s: %s', p, resp)
-
-    except ImportError:
-        logger.warning('africastalking package not installed. Run: pip install africastalking')
+        # 5. Dispatch
+        requests.post("https://sms.vynfy.com/api/v1/send", json=payload, headers=headers, timeout=10)
+        
     except Exception as e:
-        logger.error('SMS send error: %s', e)
-
+        logger.error('SMS Platform Error: %s', e)
 
 def send_sms_receipt(org_id: int, phone: str, message: str):
-    """Non-blocking SMS dispatch. Never raises — failures are logged only."""
-    t = threading.Thread(target=_send, args=(org_id, phone, message), daemon=True)
-    t.start()
+    """Entry point for the POS to trigger an SMS receipt in the background."""
+    threading.Thread(
+        target=_send_vynfy_platform, 
+        args=(org_id, phone, message),
+        daemon=True
+    ).start()

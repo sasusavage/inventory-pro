@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python)",
+      "Read(//c/Users/DeLL/Downloads/inventort/**)"
+    ]
+  }
+}

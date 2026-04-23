@@ -20,11 +20,8 @@ SETTING_KEYS = {
     'scheduler_weekly_report': 'Weekly AI report via Telegram (true/false)',
     'loyalty_earn_rate': 'Loyalty points earned per $1 spent (default 1)',
     'loyalty_redeem_rate': 'Points needed to redeem $1 discount (default 100)',
-    # SMS receipts (Africa's Talking)
+    # SMS receipts (Platform-managed)
     'sms_enabled':    'Enable SMS receipts (1 = yes, 0 = no)',
-    'sms_username':   "Africa's Talking username (use 'sandbox' for testing)",
-    'sms_api_key':    "Africa's Talking API key",
-    'sms_sender_id':  'SMS Sender ID (leave blank for default)',
 }
 
 
@@ -82,10 +79,11 @@ def test_telegram():
     if not token or not chat_id:
         return jsonify({'error': 'Telegram bot token and chat ID must be saved first'}), 400
 
+    from flask import session
     notify_async(
-        "✅ <b>InventoryPro Test</b>\n\n"
-        "Your Telegram notifications are working correctly!\n"
-        "You'll receive low-stock and sale alerts here."
+        session.get('organisation_id'),
+        "<b>Telegram Connection Test</b>\n\n"
+        "Configured successfully! You will now receive alerts here."
     )
     return jsonify({'message': 'Test message sent — check your Telegram chat'})
 

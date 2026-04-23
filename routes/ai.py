@@ -16,15 +16,16 @@ INSIGHTS_TTL = 10 * 60
 @login_required
 @admin_required
 def get_insights():
-    """AI-generated insights for the analytics dashboard."""
+    org_id = session.get('organisation_id')
     now = time.time()
-    if 'insights' in _insights_cache and _insights_cache['insights']['expires'] > now:
-        return jsonify(_insights_cache['insights']['data'])
+    cache_key = f"insights_{org_id}"
+    if cache_key in _insights_cache and _insights_cache[cache_key]['expires'] > now:
+        return jsonify(_insights_cache[cache_key]['data'])
 
     try:
         from ai_engine import get_insights as _get_insights
-        data = _get_insights()
-        _insights_cache['insights'] = {'data': data, 'expires': now + INSIGHTS_TTL}
+        data = _get_insights(org_id)
+        _insights_cache[cache_key] = {'data': data, 'expires': now + INSIGHTS_TTL}
         return jsonify(data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -34,10 +35,9 @@ def get_insights():
 @login_required
 @admin_required
 def get_context():
-    """Return the raw business context (useful for debugging / advanced use)."""
     try:
         from ai_engine import build_business_context
-        return jsonify(build_business_context())
+        return jsonify(build_business_context(session.get('organisation_id')))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -46,19 +46,15 @@ def get_context():
 @login_required
 @admin_required
 def ask():
-    """
-    General-purpose AI chat endpoint.
-    Body: { "message": "..." }
-    """
     data = request.json or {}
     message = (data.get('message') or '').strip()
+    org_id = session.get('organisation_id')
     if not message:
         return jsonify({'error': 'message is required'}), 400
 
     try:
-        from ai_engine import ask_ai, build_business_context
-        context = build_business_context()
-        reply = ask_ai(message, context=context, for_telegram=False)
+        from ai_engine import ask_ai
+        reply = ask_ai(org_id, message, for_telegram=False)
         return jsonify({'reply': reply})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -68,10 +64,9 @@ def ask():
 @login_required
 @admin_required
 def health_report():
-    """Full system health report (markdown)."""
     try:
         from ai_engine import get_system_health
-        return jsonify({'report': get_system_health()})
+        return jsonify({'report': get_system_health(session.get('organisation_id'))})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -80,10 +75,9 @@ def health_report():
 @login_required
 @admin_required
 def predictions():
-    """7-day predictions."""
     try:
         from ai_engine import get_predictions
-        return jsonify({'predictions': get_predictions()})
+        return jsonify({'predictions': get_predictions(session.get('organisation_id'))})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -92,8 +86,8 @@ def predictions():
 @login_required
 @admin_required
 def invalidate_cache():
-    """Force-refresh the AI context and insights cache."""
-    _insights_cache.clear()
+    org_id = session.get('organisation_id')
+    _insights_cache.pop(f"insights_{org_id}", None)
     from ai_engine import invalidate_ai_cache
-    invalidate_ai_cache()
+    invalidate_ai_cache(org_id)
     return jsonify({'message': 'AI cache cleared'})

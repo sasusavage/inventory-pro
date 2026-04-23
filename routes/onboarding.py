@@ -155,7 +155,7 @@ def demo_request():
             + (f"📝 {notes}\n" if notes else "")
         )
         from notifications import notify_async
-        notify_async(msg)
+        notify_async(0, msg) # Use Platform Bot (org_id=0 falls back to .env)
     except Exception:
         pass  # never block the response
 

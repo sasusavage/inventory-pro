@@ -213,8 +213,10 @@ def create_sale():
         from models import AppSetting
         if AppSetting.get('notify_on_sale', '0') == '1':
             from notifications import sale_summary_alert
+            customer = Customer.query.get(data['customer_id'])
             sale_summary_alert(
-                Customer.query.get(data['customer_id']).full_name,
+                g.org_id,
+                customer.full_name if customer else "Guest",
                 new_sale.total_amount,
                 new_sale.payment_status,
             )

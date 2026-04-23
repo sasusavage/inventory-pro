@@ -31,6 +31,6 @@ def _maybe_alert_low_stock(product_id):
         product = Product.query.get(product_id)
         if product and product.quantity_in_stock <= product.min_stock_level:
             from notifications import low_stock_alert
-            low_stock_alert(product.name, product.quantity_in_stock, product.min_stock_level)
+            low_stock_alert(product.organisation_id, product.name, product.quantity_in_stock, product.min_stock_level)
     except Exception:
         pass  # Never let a notification failure break a transaction
